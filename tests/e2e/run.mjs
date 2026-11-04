@@ -1,0 +1,688 @@
+// Roteiro completo no Chrome: cadastro → venda → troca → compra → contagem →
+// financeiro → catálogo → pedido no WhatsApp → perfis e segurança → todas as telas.
+// Rodar: cd tests && npm run test:e2e   (precisa de `node netlify/build.mjs` antes)
+import { createDb, addUser, q, open, login, nav, shot, audit, ok, section, result, startServer, stopServer, BASE } from './harness.mjs';
+
+const db = await createDb();
+const adminId = await addUser(db, 'siterota44@gmail.com', 'Rota 44', 'admin');
+await addUser(db, 'gerente@t.test', 'Gê', 'gerente');
+const vendId = await addUser(db, 'vendedor@t.test', 'Vê', 'vendedor');
+await addUser(db, 'estoque@t.test', 'Stock', 'estoquista');
+await startServer();
+
+const n = (v) => Number(v);
+const one = async (sql, params) => (await q(db, sql, params))[0];
+const setOk = async (page, sel) => { await page.click(sel); };
+const modalOpen = (page) => page.waitForSelector('dialog.modal[open]');
+const closeTop = async (page) => { await page.evaluate(() => [...document.querySelectorAll('dialog.modal[open] [data-close]')].pop()?.click()); await page.waitForTimeout(80); };
+const toastWith = (page, text) => page.waitForSelector(`.toast:has-text("${text}")`, { timeout: 8000 });
+
+/* ================================================================= ADMIN */
+const A = await open(db, { device: 'Desktop', theme: 'dark' });
+const page = A.page;
+
+section('Login');
+await page.goto(`${BASE}/sistema`);
+await page.fill('#email', 'siterota44@gmail.com');
+await page.fill('#password', 'errada');
+await page.click('button[type=submit]');
+await page.waitForSelector('[data-error]:not(.hide)');
+ok((await page.textContent('[data-error-text]')).includes('incorretos'), 'senha errada mostra erro em português');
+await shot(page, 'login-dark');
+await page.fill('#password', 'senha-de-teste');
+await page.click('button[type=submit]');
+await page.waitForSelector('.app');
+ok(await page.isVisible('[data-route=financeiro]'), 'admin vê o Financeiro no menu');
+await shot(page, 'painel-dark');
+
+section('Ajustes da loja');
+await nav(page, 'ajustes');
+await page.fill('[data-store] [name=whatsapp]', '44999990000');
+await page.fill('[data-store] [name=instagram]', '@rota44');
+await page.fill('[data-store] [name=address]', 'Rua da Quebrada, 44');
+await page.click('[data-save-store]');
+await toastWith(page, 'Dados da loja salvos');
+ok((await one(`select whatsapp from public.store_settings`)).whatsapp === '44999990000', 'WhatsApp gravado só com dígitos');
+
+section('Cadastro de produto com grade');
+await nav(page, 'produtos');
+ok((await page.locator('tr[data-open]').count()) === 3, 'lista mostra os 3 produtos de exemplo');
+await page.click('[data-new]');
+await modalOpen(page);
+await page.fill('[data-f] [name=name]', 'Moletom Canguru Heavy');
+const catId = (await one(`select id from public.categories where slug='moletom-canguru'`)).id;
+await page.selectOption('[data-f] [name=category_id]', catId);
+await page.waitForTimeout(60);
+ok((await page.inputValue('[data-f] [name=grid_id]')) !== '', 'categoria já puxa a grade padrão');
+const preto = (await one(`select id from public.colors where name='Preto'`)).id;
+const vinho = (await one(`select id from public.colors where name='Vinho'`)).id;
+await page.click(`[data-color="${preto}"]`);
+await page.click(`[data-color="${vinho}"]`);
+const combos = await page.locator('[data-combo]').count();
+ok(combos === 14, `2 cores × 7 tamanhos = ${combos} combinações`);
+// cada clique redesenha a grade: busca de novo a cada vez
+for (const i of [5, 6]) await page.evaluate((n) => document.querySelectorAll('[data-combo]')[n].querySelector('[data-on]').click(), i);
+await page.waitForTimeout(50);
+await page.evaluate(() => {
+  document.querySelectorAll('[data-combo] [data-initial]').forEach((i) => { i.value = '4'; i.dispatchEvent(new Event('input', { bubbles: true })); });
+});
+await page.fill('[data-f] [name=base_price]', '28990');
+await page.fill('[data-f] [name=cost]', '11000');
+await page.waitForTimeout(50);
+ok((await page.textContent('[data-margin]')).includes('%'), 'margem aparece ao digitar custo e preço');
+await page.fill('[data-f] [name=gsm]', '420');
+// foto de verdade: gerada no canvas e enviada pelo campo
+const png = await page.evaluate(() => {
+  const c = document.createElement('canvas'); c.width = 900; c.height = 1100;
+  const g = c.getContext('2d'); g.fillStyle = '#222'; g.fillRect(0, 0, 900, 1100); g.fillStyle = '#f00'; g.fillRect(200, 300, 500, 500);
+  return c.toDataURL('image/png').split(',')[1];
+});
+await page.setInputFiles('[data-gallery] [data-file]', { name: 'foto.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') });
+await page.waitForSelector('[data-gallery] .gallery-item');
+await shot(page, 'produto-form-dark', { full: false });
+await page.click('.modal-foot [data-ok]');
+await toastWith(page, 'Produto criado');
+const mol = await one(`select * from public.products where name='Moletom Canguru Heavy'`);
+const molV = await q(db, `select * from public.product_variants where product_id=$1 order by sku`, [mol.id]);
+ok(molV.length === 12, `gravou 12 variações (2 foram desmarcadas), veio ${molV.length}`);
+ok(/^R44-MOL-GEN-\d{3}-(PRT|VIN)-/.test(molV[0].sku), `SKU automático: ${molV[0].sku}`);
+ok(molV.every((v) => v.on_hand === 4), 'estoque inicial entrou em cada variação');
+ok(mol.cover_url.includes('/storage/v1/object/public/produtos/'), 'foto subiu para o Storage e virou capa');
+ok(n((await one(`select avg_cost from public.variant_costs where variant_id=$1`, [molV[0].id])).avg_cost) === 110, 'custo gravado');
+const V = molV[0];
+
+section('Edição: preço vira histórico');
+await page.click(`tr[data-open="${mol.id}"]`);
+await modalOpen(page);
+await page.click('[data-edit]');
+await page.waitForSelector('[data-f] [name=base_price]');
+await page.fill('[data-f] [name=base_price]', '29990');
+await page.click('dialog.modal[open]:last-of-type .modal-foot [data-ok]');
+await toastWith(page, 'Produto salvo');
+ok((await q(db, `select * from public.price_history where product_id=$1`, [mol.id])).length === 1, 'preço antigo guardado');
+ok((await q(db, `select * from public.product_variants where product_id=$1`, [mol.id])).length === 12, 'editar não duplica variação');
+await page.waitForTimeout(100);
+await closeTop(page);
+
+section('PDV: venda no balcão');
+await nav(page, 'pdv');
+await page.fill('[data-scan]', V.barcode);
+await page.press('[data-scan]', 'Enter');
+await page.waitForSelector('.cart-item');
+ok((await page.locator('.cart-item').count()) === 1, 'bipar o código coloca no carrinho');
+await page.fill('[data-scan]', 'calca baggy');
+await page.waitForTimeout(250);
+ok((await page.locator('.pos-card').count()) === 1, 'busca filtra sem acento');
+await page.click('.pos-card');
+await modalOpen(page);
+await page.click('dialog.modal[open] .grid-cell:not([disabled])');
+await closeTop(page);
+ok((await page.locator('.cart-item').count()) === 2, 'grade cor × tamanho adiciona a peça');
+await shot(page, 'pdv-dark');
+await page.click('[data-checkout]');
+await modalOpen(page);
+await page.click('[data-method=dinheiro]');
+await page.fill('[data-method-form] [name=amount]', '70000');
+await page.click('[data-method-form] [data-add]');
+await page.waitForSelector('.pay-line');
+ok((await page.textContent('.pay-line')).includes('troco'), 'troco calculado');
+await page.click('[data-finish]');
+await page.waitForSelector('.toast:has-text("Caixa fechado")');
+ok(true, 'dinheiro sem caixa aberto pede para abrir');
+await page.waitForSelector('dialog.modal[open] [name=amount]');
+await page.fill('dialog.modal[open]:last-of-type [name=amount]', '10000');
+await page.click('dialog.modal[open]:last-of-type [data-ok]');
+await toastWith(page, 'aberto');
+await page.waitForTimeout(150);
+await page.click('[data-finish]');
+await page.waitForSelector('.receipt');
+ok(true, 'venda gravada e comprovante aberto');
+await shot(page, 'comprovante');
+const sale1 = await one(`select * from public.sales order by number desc limit 1`);
+ok(n(sale1.total) === 299.90 + 319.90, `total certo: ${sale1.total}`);
+ok(sale1.status === 'entregue' && n(sale1.balance) === 0, 'venda paga e entregue');
+ok((await one(`select on_hand from public.product_variants where id=$1`, [V.id])).on_hand === 3, 'estoque baixou');
+ok((await q(db, `select * from public.sale_payments where sale_id=$1`, [sale1.id]))[0].change_given != null, 'troco registrado');
+await closeTop(page);
+
+section('Rascunho do carrinho sobrevive a recarregar');
+await page.fill('[data-scan]', molV[1].barcode);
+await page.press('[data-scan]', 'Enter');
+await page.reload();
+await page.waitForSelector('.cart-item');
+ok(true, 'carrinho continua lá depois de recarregar');
+
+section('Pedido online: reserva e pagamento');
+await page.click('[data-mode]');
+await modalOpen(page);
+await page.selectOption('dialog.modal[open] [name=delivery]', 'correios');
+await page.fill('dialog.modal[open] [name=shipping]', '2500');
+await page.click('dialog.modal[open] [data-ok]');
+await page.waitForTimeout(80);
+await page.click('[data-checkout]');
+await page.waitForSelector('.receipt');
+const onl = await one(`select * from public.sales order by number desc limit 1`);
+ok(onl.status === 'aguardando_pagamento' && onl.stock_state === 'reserved', 'pedido nasce reservando');
+ok((await one(`select reserved from public.product_variants where id=$1`, [molV[1].id])).reserved === 1, 'peça reservada');
+await closeTop(page);
+await nav(page, 'vendas');
+await page.selectOption('[data-f=period]', 'tudo');
+await page.click(`tr[data-open="${onl.id}"]`);
+await modalOpen(page);
+await shot(page, 'venda-ficha-dark');
+await page.click('[data-pay]');
+await page.waitForSelector('dialog.modal[open]:last-of-type [name=method]');
+await page.click('dialog.modal[open]:last-of-type [data-ok]');
+await toastWith(page, 'Pago por completo');
+const paid = await one(`select status, stock_state, paid_total from public.sales where id=$1`, [onl.id]);
+ok(paid.status === 'pago' && paid.stock_state === 'out', 'pagou: sai de verdade do estoque');
+await page.waitForTimeout(100);
+await page.click('[data-step=em_separacao]');
+await toastWith(page, 'Situação atualizada');
+ok((await one(`select status from public.sales where id=$1`, [onl.id])).status === 'em_separacao', 'funil anda pela ficha');
+
+section('Cancelar com estorno');
+await page.click('[data-cancel]');
+await page.waitForSelector('dialog.modal[open]:last-of-type [name=reason]');
+await page.click('dialog.modal[open]:last-of-type [data-ok]');
+await page.waitForSelector('.toast:has-text("Informe o motivo")');
+ok(true, 'motivo é obrigatório');
+await page.fill('dialog.modal[open]:last-of-type [name=reason]', 'Cliente desistiu');
+await page.click('dialog.modal[open]:last-of-type [data-ok]');
+await toastWith(page, 'Venda cancelada');
+const cn = await one(`select status, paid_total from public.sales where id=$1`, [onl.id]);
+ok(cn.status === 'cancelado' && n(cn.paid_total) === 0, 'cancelada e estornada');
+ok((await one(`select on_hand from public.product_variants where id=$1`, [molV[1].id])).on_hand === 4, 'peça voltou');
+await closeTop(page);
+
+section('Troca e vale-troca');
+await nav(page, 'trocas');
+await page.click('[data-new]');
+await modalOpen(page);
+await page.click(`[data-sale="${sale1.id}"]`);
+await page.waitForSelector('[data-item]');
+await page.selectOption('[data-item] [name=qty]', '1');
+await page.click('dialog.modal[open] .modal-foot [data-ok]');
+await page.waitForSelector('.modal-head h2:has-text("Vale-troca gerado")');
+const credit = await one(`select * from public.store_credits order by created_at desc limit 1`);
+ok(credit && n(credit.balance) > 0, `vale gerado: ${credit.code}, ${credit.balance}`);
+ok((await one(`select on_hand from public.product_variants where id=$1`, [V.id])).on_hand === 4, 'peça da troca voltou ao estoque');
+await shot(page, 'vale-troca');
+await closeTop(page);
+await nav(page, 'pdv');
+await page.fill('[data-scan]', molV[2].barcode);
+await page.press('[data-scan]', 'Enter');
+await page.waitForSelector('.cart-item');
+await page.click('[data-checkout]');
+await modalOpen(page);
+await page.click('[data-method=vale_troca]');
+await page.fill('[data-method-form] [name=code]', credit.code);
+await page.click('[data-method-form] [data-add]');
+await page.waitForSelector('.pay-line');
+await page.click('[data-method=pix]').catch(() => {});
+await page.waitForTimeout(60);
+await page.click('[data-finish]');
+await page.waitForSelector('.receipt');
+ok(n((await one(`select balance from public.store_credits where id=$1`, [credit.id])).balance) === 0, 'vale usado no PDV');
+await closeTop(page);
+
+section('Caixa: fechamento');
+await nav(page, 'caixa');
+await page.waitForSelector('.kpi');
+await shot(page, 'caixa-dark');
+await page.click('[data-move=sangria]');
+await modalOpen(page);
+await page.fill('dialog.modal[open] [name=amount]', '5000');
+await page.fill('dialog.modal[open] [name=reason]', 'Depósito');
+await page.click('dialog.modal[open] [data-ok]');
+await toastWith(page, 'Lançado');
+await page.waitForTimeout(200);
+await page.click('[data-close-cash]');
+await page.waitForSelector('dialog.modal[open] [name=dinheiro]');
+await page.fill('dialog.modal[open] [name=dinheiro]', '6000');
+await page.click('dialog.modal[open] [data-ok]');
+await page.waitForSelector('.toast:has-text("Caixa fechado")');
+const cx = await one(`select * from public.cash_sessions order by number desc limit 1`);
+ok(cx.closed_at && n(cx.expected.dinheiro) === n(100) + 619.80 - 50, `esperado no caixa: ${cx.expected.dinheiro}; diferença ${cx.difference}`);
+
+section('Compra em grade, recebimento e custo médio');
+await nav(page, 'fornecedores');
+await page.click('[data-new]');
+await modalOpen(page);
+await page.fill('dialog.modal[open] [name=name]', 'Confecção da Rua');
+await page.selectOption('dialog.modal[open] [name=kind]', 'confeccao');
+await page.click('dialog.modal[open] [data-ok]');
+await toastWith(page, 'Fornecedor salvo');
+await nav(page, 'compras');
+await page.click('[data-new]');
+await modalOpen(page);
+const sup = await one(`select id from public.suppliers limit 1`);
+await page.selectOption('dialog.modal[open] [name=supplier_id]', sup.id);
+await page.fill('dialog.modal[open] [name=freight]', '5000');
+await page.fill('dialog.modal[open] [data-search]', 'moletom');
+await page.waitForSelector('[data-pick]');
+await page.click('[data-pick]');
+await page.waitForSelector('[data-gridqty]');
+await page.fill('dialog.modal[open] [data-unit]', '12000');
+await page.fill(`[data-gridqty="${V.id}"]`, '10');
+await shot(page, 'compra-grade-dark');
+await page.click('[data-grid-add]');
+await page.waitForSelector('[data-rm]');
+await page.click('[data-save=enviado]');
+await page.waitForSelector('.toast:has-text("salvo")');
+const pu = await one(`select * from public.purchases order by number desc limit 1`);
+ok(n(pu.total) === 1250, `total com frete: ${pu.total}`);
+await page.click(`tr[data-open="${pu.id}"]`);
+await modalOpen(page);
+await page.click('[data-receive]');
+await page.waitForSelector('[data-qty]');
+await page.fill('[data-qty]', '6');
+await page.click('dialog.modal[open]:last-of-type [data-ok]');
+await page.waitForSelector('.modal-head h2:has-text("Imprimir as etiquetas")');
+ok((await one(`select status from public.purchases where id=$1`, [pu.id])).status === 'parcial', 'recebimento parcial');
+ok((await one(`select on_hand from public.product_variants where id=$1`, [V.id])).on_hand === 10, 'entrou 6 no estoque');
+const avg = n((await one(`select avg_cost from public.variant_costs where variant_id=$1`, [V.id])).avg_cost);
+ok(Math.abs(avg - ((4 * 110 + 6 * 125) / 10)) < 0.01, `custo médio com frete rateado: ${avg.toFixed(2)}`);
+ok((await q(db, `select * from public.bills where purchase_id=$1`, [pu.id])).length === 1, 'gerou conta a pagar');
+await page.click('dialog.modal[open]:last-of-type [data-confirm]');
+await page.waitForSelector('.label-tag');
+ok((await page.locator('.label-tag svg rect').count()) > 20, 'etiqueta com código de barras em SVG');
+await shot(page, 'etiquetas');
+// impressão: só a folha de etiquetas aparece no papel, todas elas
+await page.evaluate(() => { window.print = () => {}; });
+await page.click('dialog.modal[open] [data-print]');
+await page.emulateMedia({ media: 'print' });
+ok((await page.locator('#print-root .label-tag').count()) === 6, '6 etiquetas na folha de impressão');
+ok(await page.isVisible('#print-root .label-tag') && !(await page.isVisible('.sidebar')), 'no papel só sai a etiqueta');
+await page.pdf({ path: 'out/etiquetas.pdf', width: '100mm', height: '60mm', printBackground: true });
+await page.emulateMedia({ media: 'screen' });
+await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+await closeTop(page);
+await closeTop(page);
+
+section('Contagem de estoque');
+await nav(page, 'estoque');
+await shot(page, 'estoque-dark');
+await page.click('[data-tab=contagem]');
+await page.click('[data-start]');
+await page.waitForSelector('[data-count]');
+await page.fill(`[data-count="${V.id}"]`, '8');
+await page.waitForTimeout(350);
+await page.click('[data-apply]');
+await page.waitForSelector('.modal-head h2:has-text("Aplicar 1 ajuste")');
+await page.click('dialog.modal[open]:last-of-type [data-confirm]');
+await toastWith(page, 'Contagem aplicada');
+ok((await one(`select on_hand from public.product_variants where id=$1`, [V.id])).on_hand === 8, 'saldo igual à contagem');
+ok((await one(`select type, qty from public.stock_movements where variant_id=$1 order by id desc limit 1`, [V.id])).type === 'inventario', 'ajuste no kardex');
+
+section('Kardex e ajuste manual');
+await page.click('[data-tab=posicao]');
+await page.click(`tr[data-variant="${V.id}"]`);
+await page.waitForSelector('[data-kardex] tr');
+ok((await page.locator('[data-kardex] tbody tr').count()) >= 5, 'histórico mostra os movimentos');
+await shot(page, 'kardex-dark');
+await page.click('[data-move=ajuste]');
+await page.waitForSelector('[name=new_on_hand]');
+await page.click('dialog.modal[open]:last-of-type [data-ok]');
+await page.waitForSelector('.toast:has-text("Informe o motivo")');
+ok(true, 'ajuste sem motivo é recusado na tela');
+await closeTop(page);
+await closeTop(page);
+
+section('Promoção e cupom');
+await nav(page, 'promocoes');
+await page.click('[data-new]');
+await modalOpen(page);
+await page.fill('dialog.modal[open] [name=name]', 'Black 44');
+await page.fill('dialog.modal[open] [name=percent]', '10');
+await page.click('dialog.modal[open] [data-ok]');
+await toastWith(page, 'Promoção salva');
+await page.click('[data-tab=cupons]');
+await page.click('[data-new]');
+await modalOpen(page);
+await page.fill('dialog.modal[open] [name=code]', 'rota10');
+await page.fill('dialog.modal[open] [name=value]', '10');
+await page.click('dialog.modal[open] [data-ok]');
+await toastWith(page, 'Cupom salvo');
+ok((await one(`select code from public.coupons`)).code === 'ROTA10', 'cupom em maiúsculas');
+
+section('Cadastros');
+await nav(page, 'cadastros');
+await page.click('[data-tab=drops]');
+await page.click('[data-new]');
+await modalOpen(page);
+await page.fill('dialog.modal[open] [name=name]', 'Drop 07 Night Run');
+await page.fill('dialog.modal[open] [name=limit_per_customer]', '2');
+const future = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 16);
+await page.fill('dialog.modal[open] [name=launch_at]', future);
+await page.click('dialog.modal[open] [data-ok]');
+await toastWith(page, 'Salvo');
+const drop = await one(`select * from public.collections`);
+ok(drop.slug === 'drop-07-night-run', 'drop criado com slug');
+await page.click('[data-tab=categorias]');
+await page.waitForTimeout(80);
+await shot(page, 'cadastros-dark');
+await page.click('[data-tab=cores]');
+await page.click('[data-new]');
+await modalOpen(page);
+await page.fill('dialog.modal[open] [name=name]', 'Pink');
+await page.fill('dialog.modal[open] [name=code]', 'PNK');
+await page.click('dialog.modal[open] [data-ok]');
+await toastWith(page, 'Salvo');
+await page.click('[data-tab=grades]');
+await page.click('[data-new]');
+await modalOpen(page);
+await page.fill('dialog.modal[open] [name=name]', 'Infantil');
+await page.fill('dialog.modal[open] [name=labels]', '2, 4, 6, 8');
+await page.click('dialog.modal[open] [data-ok]');
+await page.waitForSelector('dialog.modal[open]', { state: 'detached' });
+ok((await q(db, `select s.label from public.sizes s join public.size_grids g on g.id=s.grid_id where g.name='Infantil'`)).length === 4, 'grade nova com tamanhos');
+await page.click('[data-tab=medidas]');
+await page.waitForTimeout(60);
+
+section('Financeiro');
+await nav(page, 'financeiro');
+await shot(page, 'financeiro-dark');
+ok((await page.textContent('[data-body]')).includes('Lucro líquido'), 'resultado do período');
+await page.click('[data-tab=pagar]');
+await page.click('[data-new-bill]');
+await modalOpen(page);
+await page.fill('dialog.modal[open] [name=description]', 'Aluguel');
+await page.fill('dialog.modal[open] [name=amount]', '150000');
+await page.selectOption('dialog.modal[open] [name=recurring]', 'mensal');
+await page.click('dialog.modal[open] [data-ok]');
+await toastWith(page, 'Conta salva');
+const bill = await one(`select id from public.bills where description='Aluguel'`);
+await page.click(`[data-pay="${bill.id}"]`);
+await modalOpen(page);
+await page.click('dialog.modal[open] [data-ok]');
+await toastWith(page, 'Conta baixada');
+ok((await q(db, `select * from public.bills where description='Aluguel' and status='aberta'`)).length === 1, 'conta mensal gerou a próxima');
+await page.click('[data-tab=fluxo]');
+await page.waitForTimeout(60);
+ok((await page.textContent('[data-body]')).includes('Acumulado'), 'fluxo de caixa');
+await page.click('[data-tab=receber]');
+await page.click('[data-tab=contas]');
+await page.waitForTimeout(60);
+
+section('Relatórios');
+await nav(page, 'relatorios');
+for (const t of ['vendas', 'produtos', 'estoque', 'trocas', 'clientes', 'equipe']) {
+  await page.click(`[data-tab=${t}]`);
+  await page.waitForTimeout(80);
+  ok((await page.locator('[data-body] .card').count()) > 0, `aba ${t} desenha`);
+  await shot(page, `relatorio-${t}-dark`);
+}
+
+section('Cliente e XSS');
+await nav(page, 'clientes');
+await page.click('[data-new]');
+await modalOpen(page);
+const evil = '<img src=x onerror="window.__xss=1"><script>window.__xss=2</script>';
+await page.fill('dialog.modal[open] [name=name]', evil);
+await page.fill('dialog.modal[open] [name=phone]', '44988887777');
+await page.click('dialog.modal[open] [data-ok]');
+await toastWith(page, 'Cliente salvo');
+await page.waitForSelector('tr[data-open]');
+await page.click('tr[data-open]');
+await modalOpen(page);
+await page.waitForTimeout(150);
+ok(!(await page.evaluate(() => window.__xss)), 'código no nome do cliente não executa');
+await shot(page, 'cliente-ficha-dark');
+await closeTop(page);
+
+section('Catálogo: drop e estoque aparecem');
+await page.evaluate(() => {});
+const G = await open(db, { device: 'iPhone 13', theme: 'dark' });
+const c = G.page;
+await db.query(`update public.products set collection_id=$1 where slug='bermuda-jeans-cruz'`, [drop.id]);
+await c.goto(`${BASE}/`);
+await c.waitForSelector('.c-hero');
+ok(await c.isVisible('.c-next-drop'), 'home mostra o próximo drop com contagem');
+ok((await c.textContent('[data-countdown] [data-d]')).trim() !== '--', 'contagem regressiva roda');
+await shot(c, 'cat-home-mobile-dark', { full: true });
+ok((await c.locator('.c-card').count()) > 0, 'grade de produtos');
+const txt = await c.evaluate(() => document.body.innerText + JSON.stringify(Object.keys(localStorage)));
+ok(!/avg_cost|last_cost|on_hand/.test(txt), 'nada interno na página');
+
+await c.goto(`${BASE}/#/loja`);
+await c.waitForSelector('.c-list-main .c-card');
+const before = await c.locator('.c-list-main .c-card').count();
+ok(before >= 3, `listagem com ${before} peças (drop fechado fora)`);
+await c.click('[data-open-filters]');
+await c.waitForSelector('dialog.c-dialog .c-filters');
+await shot(c, 'cat-filtros-mobile');
+await c.click('dialog.c-dialog [data-fsize="P"]');
+await c.click('dialog.c-dialog footer [data-x]');
+await c.waitForTimeout(80);
+ok((await c.locator('.c-list-main .c-card').count()) >= 1, 'filtro por tamanho funciona');
+await c.goto(`${BASE}/#/busca/moleton`);
+await c.waitForSelector('.c-list-main');
+await c.waitForTimeout(100);
+ok((await c.locator('.c-list-main .c-card').count()) === 1, 'busca tolera erro de digitação (moleton → Moletom)');
+
+section('Ficha e sacola');
+await c.goto(`${BASE}/#/p/${mol.slug}`);
+await c.waitForSelector('[data-sizes] .c-size');
+await db.query(`select 1`);
+await shot(c, 'cat-ficha-mobile-dark', { full: true });
+await c.click('[data-add]');
+await c.waitForSelector('.c-toast:has-text("Escolha o tamanho")');
+ok(true, 'sem tamanho não coloca na sacola');
+await c.click('[data-sizes] .c-size:not(.off)');
+ok(await c.isEnabled('[data-add]'), 'tamanho escolhido libera o botão');
+await c.click('[data-add]');
+await c.waitForSelector('dialog.c-dialog .c-line');
+await shot(c, 'cat-sacola-mobile');
+await c.fill('dialog.c-dialog [name=code]', 'ROTA10');
+await c.click('dialog.c-dialog [data-coupon] button');
+await c.waitForSelector('dialog.c-dialog .c-row:has-text("Cupom")');
+ok(true, 'cupom aplicado na sacola');
+await c.click('[data-next]');
+await c.waitForSelector('[data-send]');
+await c.fill('[data-send] [name=name]', 'Sabota Teste');
+await c.fill('[data-send] [name=phone]', '44977776666');
+const [wa] = await Promise.all([c.context().waitForEvent('page'), c.click('[form=c-send]')]);
+await c.waitForSelector('.c-sheet h2:has-text("Pedido enviado")');
+await wa.waitForLoadState('domcontentloaded').catch(() => {});
+const waUrl = decodeURIComponent(wa.url());
+ok(waUrl.includes('wa.me/5544999990000'), 'abriu o WhatsApp da loja');
+ok(waUrl.includes('Sabota Teste') && waUrl.includes('Moletom Canguru Heavy') && /Total: R\$/.test(waUrl), 'mensagem com nome, peça e total');
+const req = await one(`select * from public.catalog_requests order by number desc limit 1`);
+ok(req.customer_name === 'Sabota Teste' && req.coupon_code === 'ROTA10', 'pedido registrado no sistema');
+ok(n(req.items[0].unit_price) === n(req.items[0].unit_price) && n(req.total) < n(req.items[0].unit_price), 'desconto do cupom aplicado no banco');
+ok((await one(`select reserved from public.product_variants where id=$1`, [req.items[0].variant_id])).reserved === 0, 'pedido público NÃO reserva estoque');
+await wa.close();
+
+section('Avise-me');
+const allOut = molV[3];
+await db.query(`update public.product_variants set on_hand=0 where product_id=$1`, [mol.id]);
+await c.goto(`${BASE}/`);
+await c.goto(`${BASE}/#/p/${mol.slug}`);
+await c.reload();
+await c.waitForSelector('[data-sizes] .c-size.off');
+ok((await c.locator('[data-sizes] .c-size.off').count()) > 0, 'tamanho sem estoque aparece riscado, não some');
+await c.click('[data-sizes] .c-size.off');
+await c.waitForSelector('[data-notify]');
+await c.fill('[data-notify] [name=name]', 'Ana');
+await c.fill('[data-notify] [name=phone]', '44966665555');
+await c.click('[data-notify] button');
+await c.waitForSelector('[data-notify-box] b:has-text("Fechou")');
+ok((await q(db, `select * from public.stock_alerts`)).length === 1, 'avise-me registrado');
+await db.query(`update public.product_variants set on_hand=4 where product_id=$1`, [mol.id]);
+
+section('Páginas da loja');
+for (const p of ['sobre', 'trocas', 'frete', 'contato', 'privacidade', 'drops', `drop/${drop.slug}`, 'nao-existe']) {
+  await c.goto(`${BASE}/#/${p}`);
+  await c.waitForTimeout(80);
+  ok((await c.locator('#c-view h1, #c-view h2').count()) > 0, `/${p} abre`);
+}
+await shot(c, 'cat-404-mobile');
+ok(G.errors.length === 0, 'catálogo sem erros de JS', G.errors.join(' | '));
+ok(G.external.size === 0, 'catálogo só fala com o próprio site, Supabase e jsDelivr', [...G.external].join(','));
+await G.browser.close();
+
+section('Pedido do catálogo vira venda');
+await page.reload();
+await page.waitForSelector('.app');
+await nav(page, 'pedidos');
+await page.waitForSelector('[data-convert]');
+await shot(page, 'pedidos-dark');
+ok((await page.textContent('[data-req-count]')).trim() === '1', 'contador de pedidos novos');
+await page.click('[data-convert]');
+await page.waitForSelector('.cart-item');
+ok((await page.locator('.cart-item').count()) === 1 && (await page.textContent('[data-customer]')).includes('Sabota'), 'carrinho veio pronto com o cliente');
+await page.click('[data-checkout]');
+await page.waitForSelector('.receipt');
+const conv = await one(`select r.status, r.sale_id, s.coupon_discount from public.catalog_requests r join public.sales s on s.id=r.sale_id where r.id=$1`, [req.id]);
+ok(conv.status === 'convertido' && n(conv.coupon_discount) > 0, 'pedido virou venda, com o cupom');
+await closeTop(page);
+await page.goto(`${BASE}/sistema#/pedidos`);
+await page.waitForSelector('.app');
+await page.click('[data-tab=avise]');
+await page.waitForSelector('[data-notify]');
+ok((await page.textContent('[data-body], .view')).includes('Chegou'), 'avise-me mostra que a peça chegou');
+
+section('Catálogo online (gestão)');
+await nav(page, 'catalogo');
+await page.waitForSelector('[data-qr] svg', { timeout: 15000 });
+ok(true, 'QR code gerado');
+await shot(page, 'catalogo-admin-dark');
+await page.fill('[data-f] [name=hero_title]', 'Direto das ruas');
+await page.fill('[data-f] [name=announcement]', 'Frete grátis acima de R$ 299');
+await page.click('[data-save]');
+await toastWith(page, 'Catálogo salvo');
+ok((await one(`select hero_title from public.store_settings`)).hero_title === 'Direto das ruas', 'textos do catálogo salvos');
+
+section('Auditoria');
+await nav(page, 'ajustes');
+await page.click('[data-tab=seguranca]');
+await page.waitForSelector('[data-audit] tr');
+await shot(page, 'auditoria-dark');
+ok((await page.locator('[data-audit] tbody tr').count()) > 3, 'auditoria lista ações');
+await page.click('[data-tab=equipe]');
+await page.waitForSelector('tr[data-member]');
+ok((await page.locator('tr[data-member]').count()) === 4, 'equipe listada');
+await page.click('[data-tab=regras]');
+await page.click('[data-save-rules]');
+await toastWith(page, 'Regras salvas');
+await page.click('[data-tab=conta]');
+await page.fill('[data-pin]', '4444');
+await page.click('[data-save-pin]');
+await toastWith(page, 'Senha de liberação salva');
+ok(A.errors.length === 0, 'admin sem erros de JS', A.errors.join(' | '));
+ok(A.external.size === 0, 'sistema só fala com o próprio site, Supabase e jsDelivr', [...A.external].join(','));
+await A.browser.close();
+
+/* ============================================================= VENDEDOR */
+section('Vendedor: permissões');
+const S = await open(db, { device: 'iPhone 13', theme: 'light' });
+const v = S.page;
+const apiBodies = [];
+v.on('response', async (r) => {
+  if (r.url().includes('/rest/v1/') && r.request().method() === 'GET') {
+    try { apiBodies.push(await r.text()); } catch { /* */ }
+  }
+});
+await login(v, 'vendedor@t.test');
+ok(!(await v.locator('[data-route=financeiro]').count()), 'sem Financeiro no menu');
+ok(!(await v.locator('[data-route=relatorios]').count()), 'sem Relatórios no menu');
+ok(!(await v.locator('[data-route=trocas]').count()), 'sem Trocas no menu');
+await shot(v, 'painel-vendedor-mobile-light');
+await nav(v, 'financeiro');
+await v.waitForTimeout(100);
+ok((await v.textContent('[data-title]')) !== 'Financeiro', 'digitar o endereço não abre o Financeiro');
+await nav(v, 'produtos');
+await v.waitForTimeout(100);
+ok(!(await v.locator('[data-new]').count()), 'não cadastra produto');
+const all = apiBodies.join(' ');
+ok(!/avg_cost|last_cost|unit_cost":\s*\d/.test(all), 'custo não chega nem na resposta da API');
+await nav(v, 'pdv');
+await v.fill('[data-scan]', V.barcode);
+await v.press('[data-scan]', 'Enter');
+await v.waitForSelector('[data-mobilebar] [data-toggle-cart]:not([disabled])');
+await shot(v, 'pdv-mobile-light');
+await v.click('[data-toggle-cart]');
+await v.waitForSelector('.cart-item');
+await shot(v, 'pdv-carrinho-mobile-light');
+await v.click('[data-discount]');
+await modalOpen(v);
+await v.fill('dialog.modal[open] [name=pct]', '20');
+await v.click('dialog.modal[open] [data-ok]');
+await v.waitForTimeout(100);
+await v.click('[data-checkout]');
+await modalOpen(v);
+await v.click('[data-finish]');
+await v.waitForSelector('.modal-head h2:has-text("Senha do gerente")');
+ok(true, 'desconto acima do limite pede a senha do gerente');
+await v.fill('dialog.modal[open]:last-of-type [name=pin]', '0000');
+await v.click('dialog.modal[open]:last-of-type [data-ok]');
+await v.waitForSelector('.toast:has-text("incorreta")');
+ok(true, 'senha errada não libera');
+await v.fill('dialog.modal[open]:last-of-type [name=pin]', '4444');
+await v.click('dialog.modal[open]:last-of-type [data-ok]');
+await v.waitForSelector('.receipt');
+const lib = await one(`select approved_by, seller_id, discount_value from public.sales order by number desc limit 1`);
+ok(lib.approved_by === adminId && lib.seller_id === vendId, 'liberação registrada na venda');
+await closeTop(v);
+await nav(v, 'vendas');
+await v.waitForTimeout(100);
+ok((await q(db, `select count(*)::int c from public.sales where seller_id<>$1`, [vendId]))[0].c > 0 && (await v.locator('tr[data-open]').count()) === 1, 'vendedor vê só as próprias vendas');
+ok(S.errors.length === 0, 'vendedor sem erros de JS', S.errors.join(' | '));
+await S.browser.close();
+
+section('Estoquista');
+const E = await open(db, { device: 'Desktop', theme: 'light' });
+await login(E.page, 'estoque@t.test');
+ok(!(await E.page.locator('[data-route=vendas]').count()), 'sem Vendas');
+ok(await E.page.isVisible('[data-route=compras]'), 'com Compras');
+for (const r of ['painel', 'produtos', 'estoque', 'compras', 'fornecedores', 'etiquetas', 'ajustes']) {
+  await nav(E.page, r);
+  await E.page.waitForTimeout(120);
+}
+ok(E.errors.length === 0, 'estoquista sem erros de JS', E.errors.join(' | '));
+await E.browser.close();
+
+/* ===================================================== TODAS AS TELAS */
+section('Todas as telas: tamanhos e temas');
+const SIZES = [
+  ['iPhoneSE', { viewport: { width: 360, height: 640 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, true],
+  ['iPhone13', { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, true],
+  ['ProMax', { viewport: { width: 440, height: 956 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, true],
+  ['iPad', { viewport: { width: 820, height: 1180 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true }, true],
+  ['Notebook', { viewport: { width: 1280, height: 720 } }, false],
+  ['Desktop', { viewport: { width: 1920, height: 1080 } }, false],
+];
+const ROUTES = ['painel', 'pdv', 'vendas', 'pedidos', 'trocas', 'caixa', 'clientes', 'produtos', 'cadastros', 'promocoes', 'estoque', 'compras', 'fornecedores', 'etiquetas', 'financeiro', 'relatorios', 'catalogo', 'ajustes'];
+const CATALOG = ['', 'loja', `p/${mol.slug}`, 'drops', 'contato'];
+let problems = [];
+for (const [name, device, mobile] of SIZES) {
+  for (const theme of ['light', 'dark']) {
+    const X = await open(db, { device, theme });
+    await login(X.page, 'siterota44@gmail.com');
+    for (const r of ROUTES) {
+      await nav(X.page, r);
+      await X.page.waitForTimeout(90);
+      problems.push(...(await audit(X.page, `${name}/${theme}/${r}`, { mobile })));
+      if (theme === 'light' && (name === 'iPhone13' || name === 'Notebook') && ['painel', 'pdv', 'produtos', 'estoque', 'relatorios'].includes(r)) await shot(X.page, `tela-${name}-${r}-light`);
+      if (name === 'Desktop' && theme === 'dark' && r === 'painel') await shot(X.page, 'tela-Desktop-painel-dark');
+    }
+    for (const r of CATALOG) {
+      await X.page.goto(`${BASE}/#/${r}`);
+      await X.page.waitForSelector('.c-head');
+      await X.page.waitForTimeout(90);
+      problems.push(...(await audit(X.page, `${name}/${theme}/catalogo:${r}`, { mobile })));
+      if (['iPhone13', 'Notebook', 'Desktop'].includes(name) && r === '') await shot(X.page, `cat-${name}-home-${theme}`);
+      if (name === 'Notebook' && r === 'loja') await shot(X.page, `cat-Notebook-loja-${theme}`);
+      if (name === 'Notebook' && r.startsWith('p/')) await shot(X.page, `cat-Notebook-ficha-${theme}`);
+    }
+    if (X.errors.length) problems.push(`${name}/${theme}: ${X.errors.slice(0, 3).join(' | ')}`);
+    await X.browser.close();
+  }
+}
+problems = [...new Set(problems)];
+ok(problems.length === 0, `${SIZES.length} tamanhos × 2 temas × ${ROUTES.length + CATALOG.length} telas sem problema`, `\n    ${problems.slice(0, 40).join('\n    ')}`);
+
+await stopServer();
+const fails = result();
+process.exit(fails ? 1 : 0);

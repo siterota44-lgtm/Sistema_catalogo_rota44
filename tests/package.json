@@ -1,0 +1,18 @@
+{
+  "name": "rota44-tests",
+  "private": true,
+  "description": "Testes do sistema. O app em si não usa npm - só esta pasta de testes.",
+  "type": "module",
+  "scripts": {
+    "test": "npm run test:db && npm run test:unit",
+    "test:unit": "node --test \"unit/*.test.mjs\"",
+    "test:db": "node db/schema.test.mjs",
+    "test:security": "node security/live.test.mjs",
+    "test:e2e": "node e2e/run.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.11",
+    "opentype.js": "1.3.4",
+    "playwright-core": "^1.64.1"
+  }
+}

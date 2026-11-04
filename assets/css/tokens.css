@@ -1,0 +1,261 @@
+/* =====================================================================
+   Design tokens - Rota 44
+   Cores do escudo: vermelho #f80000, asfalto #2b2b2b, branco e o azul-aço
+   do contorno (#3a4a72). Superfícies de concreto (claro) e de asfalto
+   (escuro). O vermelho é ação e marca; status tem a própria paleta.
+   Paleta dos gráficos validada com o validador do dataviz nos dois temas.
+   ===================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* --- superfícies --- */
+  --bg:            #eeece7;
+  --bg-elevated:   #ffffff;
+  --surface:       #ffffff;
+  --surface-2:     #f4f2ee;
+  --surface-3:     #e6e3dd;
+  --surface-hover: #f1efea;
+  --overlay:       rgba(0, 0, 0, .46);
+  --glass:         rgba(255, 255, 255, .86);
+
+  /* --- traços --- */
+  --border:        rgba(0, 0, 0, .13);
+  --border-strong: rgba(0, 0, 0, .26);
+  --divider:       rgba(0, 0, 0, .08);
+
+  /* --- texto --- */
+  --text:          #141414;
+  --text-2:        #4f5054;
+  --text-3:        #6d6e73;
+  --text-invert:   #f5f5f5;
+
+  /* --- ação --- */
+  --accent:        #d90000;
+  --accent-hover:  #c20000;
+  --accent-press:  #a80000;
+  --accent-text:   #bd0000;
+  --accent-soft:   rgba(217, 0, 0, .09);
+  --accent-ring:   rgba(217, 0, 0, .34);
+  --on-accent:     #ffffff;
+
+  /* --- marca --- */
+  --asphalt:       #2b2b2b;
+  --steel:         #3a4a72;
+
+  /* --- status (fundo suave + texto forte) --- */
+  --tone-gray-bg:    #e9e8e4;  --tone-gray-fg:    #4e4f53;  --tone-gray-dot:    #85868b;
+  --tone-amber-bg:   #fbeed2;  --tone-amber-fg:   #7d5200;  --tone-amber-dot:   #d9920f;
+  --tone-teal-bg:    #d6f0ec;  --tone-teal-fg:    #0b5f55;  --tone-teal-dot:    #0f8a7a;
+  --tone-indigo-bg:  #e5e8f3;  --tone-indigo-fg:  #2f3d61;  --tone-indigo-dot:  #3a4a72;
+  --tone-blue-bg:    #dce9f8;  --tone-blue-fg:    #1d4f8c;  --tone-blue-dot:    #2f6db5;
+  --tone-green-bg:   #dcf3e2;  --tone-green-fg:   #1a6432;  --tone-green-dot:   #27a047;
+  --tone-red-bg:     #fde0de;  --tone-red-fg:     #9d1610;  --tone-red-dot:     #d90000;
+
+  --success:       #1b8039;
+  --warning:       #a66908;
+  --danger:        #c90a00;
+  --danger-soft:   rgba(201, 10, 0, .1);
+
+  /* --- gráficos: ordem fixa, nunca reciclada --- */
+  --viz-1: #d90000;
+  --viz-2: #2f6db5;
+  --viz-3: #b07a00;
+  --viz-4: #0f8a7a;
+  --viz-5: #7a4fc4;
+  --viz-6: #c2418f;
+  --viz-grid: rgba(0, 0, 0, .08);
+  --viz-track: rgba(0, 0, 0, .06);
+
+  /* --- forma: canto seco, mais rua --- */
+  --r-xs: 3px;
+  --r-sm: 5px;
+  --r-md: 7px;
+  --r-lg: 10px;
+  --r-xl: 14px;
+  --r-full: 999px;
+
+  /* --- profundidade --- */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, .06);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, .09), 0 1px 2px rgba(0, 0, 0, .05);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, .11), 0 1px 3px rgba(0, 0, 0, .05);
+  --shadow-lg: 0 18px 48px rgba(0, 0, 0, .22), 0 2px 8px rgba(0, 0, 0, .08);
+
+  /* --- tipografia --- */
+  --font: 'Barlow', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-display: 'Bebas Neue', 'Barlow Condensed', Impact, 'Arial Narrow', sans-serif;
+  --font-cond: 'Barlow Condensed', 'Barlow', 'Arial Narrow', sans-serif;
+  --font-num: 'Barlow Condensed', 'Barlow', ui-monospace, Menlo, monospace;
+
+  --fs-xs: .75rem;     /* 12 */
+  --fs-sm: .875rem;    /* 14 */
+  --fs-md: .9375rem;   /* 15 */
+  --fs-base: 1rem;     /* 16 */
+  --fs-lg: 1.125rem;   /* 18 */
+  --fs-xl: 1.5rem;     /* 24 */
+  --fs-2xl: 1.875rem;  /* 30 */
+  --fs-3xl: 2.5rem;    /* 40 */
+
+  /* --- espaço --- */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-7: 32px; --sp-8: 40px; --sp-9: 56px;
+
+  /* --- movimento --- */
+  --ease: cubic-bezier(.32, .72, 0, 1);
+  --t-fast: 120ms var(--ease);
+  --t-base: 220ms var(--ease);
+  --t-slow: 380ms var(--ease);
+
+  /* --- layout --- */
+  --sidebar-w: 240px;
+  --topbar-h: 60px;
+  --content-max: 1480px;
+
+  /* --- o muro: arte de grafite (original) atrás de tudo --- */
+  --graffiti: url('../brand/grafite-claro.webp');
+  --graffiti-opacity: .13;
+  --graffiti-strong: .55;
+}
+
+/* --------------------------------------------------------------- escuro */
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg:            #0b0b0c;
+  --bg-elevated:   #161617;
+  --surface:       #161617;
+  --surface-2:     #1e1e20;
+  --surface-3:     #2a2a2d;
+  --surface-hover: #1f1f21;
+  --overlay:       rgba(0, 0, 0, .68);
+  --glass:         rgba(18, 18, 19, .88);
+
+  --border:        #2a2a2e;
+  --border-strong: #404046;
+  --divider:       #232326;
+
+  --text:          #f5f5f5;
+  --text-2:        #b0b1b5;
+  --text-3:        #8d8e93;
+  --text-invert:   #141414;
+
+  --accent:        #e00000;
+  --accent-hover:  #f01818;
+  --accent-press:  #c00000;
+  --accent-text:   #ff5a52;
+  --accent-soft:   rgba(255, 40, 30, .16);
+  --accent-ring:   rgba(255, 60, 50, .45);
+  --on-accent:     #ffffff;
+
+  --tone-gray-bg:    #2a2a2d;  --tone-gray-fg:    #c4c5c9;  --tone-gray-dot:    #97989d;
+  --tone-amber-bg:   #3d2d0e;  --tone-amber-fg:   #ffc86b;  --tone-amber-dot:   #f0a92f;
+  --tone-teal-bg:    #0f302c;  --tone-teal-fg:    #5fd8cc;  --tone-teal-dot:    #1ea38f;
+  --tone-indigo-bg:  #20283f;  --tone-indigo-fg:  #aebcdf;  --tone-indigo-dot:  #7f93c7;
+  --tone-blue-bg:    #122c49;  --tone-blue-fg:    #8cc0f7;  --tone-blue-dot:    #4b8bd8;
+  --tone-green-bg:   #123520;  --tone-green-fg:   #6fe08d;  --tone-green-dot:   #35c45d;
+  --tone-red-bg:     #431b18;  --tone-red-fg:     #ff9a92;  --tone-red-dot:     #ff4a3f;
+
+  --success:       #35c45d;
+  --warning:       #f0a92f;
+  --danger:        #ff5046;
+  --danger-soft:   rgba(255, 70, 60, .16);
+
+  --viz-1: #f03a30;
+  --viz-2: #4b8bd8;
+  --viz-3: #b98a14;
+  --viz-4: #1ea38f;
+  --viz-5: #9270de;
+  --viz-6: #d6579c;
+  --viz-grid: rgba(255, 255, 255, .09);
+  --viz-track: rgba(255, 255, 255, .08);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, .5);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, .55);
+  --shadow-md: 0 4px 18px rgba(0, 0, 0, .55);
+  --shadow-lg: 0 20px 56px rgba(0, 0, 0, .75);
+
+  --graffiti: url('../brand/grafite-escuro.webp');
+  --graffiti-opacity: .12;
+  --graffiti-strong: .5;
+}
+
+/* Quem nunca escolheu tema segue o sistema (mesmos valores do bloco acima). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --bg:            #0b0b0c;
+    --bg-elevated:   #161617;
+    --surface:       #161617;
+    --surface-2:     #1e1e20;
+    --surface-3:     #2a2a2d;
+    --surface-hover: #1f1f21;
+    --overlay:       rgba(0, 0, 0, .68);
+    --glass:         rgba(18, 18, 19, .88);
+
+    --border:        #2a2a2e;
+    --border-strong: #404046;
+    --divider:       #232326;
+
+    --text:          #f5f5f5;
+    --text-2:        #b0b1b5;
+    --text-3:        #8d8e93;
+    --text-invert:   #141414;
+
+    --accent:        #e00000;
+    --accent-hover:  #f01818;
+    --accent-press:  #c00000;
+    --accent-text:   #ff5a52;
+    --accent-soft:   rgba(255, 40, 30, .16);
+    --accent-ring:   rgba(255, 60, 50, .45);
+
+    --tone-gray-bg:    #2a2a2d;  --tone-gray-fg:    #c4c5c9;  --tone-gray-dot:    #97989d;
+    --tone-amber-bg:   #3d2d0e;  --tone-amber-fg:   #ffc86b;  --tone-amber-dot:   #f0a92f;
+    --tone-teal-bg:    #0f302c;  --tone-teal-fg:    #5fd8cc;  --tone-teal-dot:    #1ea38f;
+    --tone-indigo-bg:  #20283f;  --tone-indigo-fg:  #aebcdf;  --tone-indigo-dot:  #7f93c7;
+    --tone-blue-bg:    #122c49;  --tone-blue-fg:    #8cc0f7;  --tone-blue-dot:    #4b8bd8;
+    --tone-green-bg:   #123520;  --tone-green-fg:   #6fe08d;  --tone-green-dot:   #35c45d;
+    --tone-red-bg:     #431b18;  --tone-red-fg:     #ff9a92;  --tone-red-dot:     #ff4a3f;
+
+    --success:       #35c45d;
+    --warning:       #f0a92f;
+    --danger:        #ff5046;
+    --danger-soft:   rgba(255, 70, 60, .16);
+
+    --viz-1: #f03a30;
+    --viz-2: #4b8bd8;
+    --viz-3: #b98a14;
+    --viz-4: #1ea38f;
+    --viz-5: #9270de;
+    --viz-6: #d6579c;
+    --viz-grid: rgba(255, 255, 255, .09);
+    --viz-track: rgba(255, 255, 255, .08);
+
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, .5);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, .55);
+    --shadow-md: 0 4px 18px rgba(0, 0, 0, .55);
+    --shadow-lg: 0 20px 56px rgba(0, 0, 0, .75);
+
+    --graffiti: url('../brand/grafite-escuro.webp');
+    --graffiti-opacity: .12;
+    --graffiti-strong: .5;
+  }
+}
+
+/* Modo privacidade: embaça valores em R$ para conferir a tela em público. */
+:root[data-privacy='on'] .money-sensitive {
+  filter: blur(7px);
+  user-select: none;
+  transition: filter var(--t-fast);
+}
+:root[data-privacy='on'] .money-sensitive:hover { filter: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

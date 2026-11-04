@@ -1,0 +1,15 @@
+# Netlify: publica só a pasta dist/ (montada por netlify/build.mjs), com os
+# cabeçalhos de segurança. Catálogo em /, sistema em /sistema.
+
+[build]
+  publish = "dist"
+  command = "node netlify/build.mjs"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# /sistema sem .html (o Netlify também faz isso sozinho; aqui fica explícito)
+[[redirects]]
+  from = "/sistema"
+  to = "/sistema.html"
+  status = 200

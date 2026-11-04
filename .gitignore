@@ -1,0 +1,32 @@
+# Sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.vscode/
+.idea/
+
+# Nunca versionar segredos: a chave secreta (service_role) jamais entra no repositório.
+.env
+.env.*
+*.key
+secrets.json
+
+# Netlify / build local
+.netlify/
+dist/
+node_modules/
+
+# Backups e exportações com dado de cliente
+backup-rota44-*.json
+*-rota44-*.csv
+*.gpg
+rota44-*.tar.gz
+0_estrutura.sql
+1_dados.sql
+2_login.sql
+
+# Testes: dependências e capturas de tela
+tests/node_modules/
+tests/out/

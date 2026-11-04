@@ -1,0 +1,645 @@
+/* =====================================================================
+   Camada mobile / iOS - carregada por último.
+   Alvo: Safari no iPhone 13 (390×844), iPhone 15 (393×852) e
+   iPhone 17 Pro Max (440×956).
+
+   Três regras que valem para o iPhone inteiro:
+     1. Campo com fonte < 16px faz o Safari dar zoom ao focar. Nunca.
+     2. Alvo de toque tem 44×44 no mínimo (Apple HIG).
+     3. Com viewport-fit=cover, o conteúdo passa por baixo da Dynamic
+        Island e da barra de gestos: use env(safe-area-inset-*).
+   ===================================================================== */
+
+:root {
+  --tap: 44px;              /* alvo mínimo de toque */
+  --tap-sm: 44px;           /* alvo secundário (mesmo mínimo, menos respiro) */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --tabbar-h: 60px;
+}
+
+/* Nada de flash cinza ao tocar, e nada de seleção acidental ao segurar. */
+body {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+input, textarea, [contenteditable] {
+  -webkit-touch-callout: default;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Sem o zoom de toque duplo: o navegador não precisa esperar para saber se
+   vem um segundo toque, e botão tocado rápido duas vezes não amplia a tela. */
+button, a, input, select, textarea, label, summary {
+  touch-action: manipulation;
+}
+
+/* ===================================================================== */
+/*  1. Campos: 16px obrigatório em telas de toque                        */
+/* ===================================================================== */
+
+@media (max-width: 860px) {
+  .input,
+  .select,
+  .textarea {
+    font-size: 16px;        /* impede o zoom automático do Safari */
+    min-height: var(--tap);
+    padding: 11px 13px;
+    border-radius: var(--r-md);
+  }
+
+  .select { padding-right: 38px; background-size: 17px; }
+  .textarea { min-height: 96px; }
+
+  .money-input > .input { padding-left: 38px; }
+  /* telefone em meia largura: o número inteiro cabe até nos iPhones de 375px */
+  .input[inputmode='tel'] { padding-left: 10px; padding-right: 8px; }
+  .money-input::before { font-size: var(--fs-base); left: 13px; }
+
+  /* O Safari renderiza o campo de data com altura própria; forçamos a nossa. */
+  input[type='date'].input { min-height: var(--tap); line-height: 1.2; }
+
+  .field { gap: 7px; }
+  .field > .label, .label { font-size: var(--fs-md); }
+}
+
+/* ===================================================================== */
+/*  2. Alvos de toque                                                     */
+/* ===================================================================== */
+
+@media (max-width: 860px) {
+  .btn {
+    min-height: var(--tap);
+    padding: 10px 18px;
+    font-size: var(--fs-base);
+  }
+  .btn-sm {
+    min-height: var(--tap-sm);
+    padding: 8px 14px;
+    font-size: var(--fs-md);
+  }
+  .btn-lg { min-height: 50px; }
+
+  .icon-btn { width: var(--tap); height: var(--tap); }
+  .icon-btn .icon { width: 21px; height: 21px; }
+  .icon-btn.sm { width: var(--tap-sm); height: var(--tap-sm); }
+  .icon-btn.sm .icon { width: 18px; height: 18px; }
+
+  .chip { min-height: var(--tap-sm); padding: 8px 15px; font-size: var(--fs-base); }
+  .chip.sm { min-height: var(--tap-sm); padding: 7px 13px; font-size: var(--fs-md); }
+
+  .segmented { flex-wrap: wrap; padding: 3px; gap: 3px; }
+  .segmented button { min-height: var(--tap-sm); padding: 8px 14px; font-size: var(--fs-md); }
+
+  .step { min-height: var(--tap-sm); padding: 9px 14px; font-size: var(--fs-sm); }
+
+  .nav-item { min-height: 48px; padding: 11px var(--sp-3); font-size: var(--fs-base); }
+  .user-chip { min-height: 48px; }
+
+  .pick { min-height: 62px; padding: 13px 15px; }
+
+  /* Rótulo de checkbox: a linha inteira vira área de toque. */
+  .check { min-height: var(--tap); padding: 4px 0; font-size: var(--fs-base); }
+  .check .box { width: 23px; height: 23px; }
+  .check .box::after { width: 12px; height: 12px; }
+
+  .switch .track { width: 50px; height: 30px; }
+  .switch .thumb { width: 24px; height: 24px; }
+  .switch input:checked + .track .thumb { transform: translateX(20px); }
+
+  .chart-table-toggle { min-height: var(--tap-sm); padding: 10px 0; font-size: var(--fs-md); }
+
+  /* Links dentro da ficha do pedido (WhatsApp, e-mail). */
+  .detail-item dd a {
+    display: inline-block;
+    min-height: var(--tap-sm);
+    padding: 9px 0;
+    margin: -9px 0;
+  }
+
+  .menu button { min-height: var(--tap); font-size: var(--fs-base); }
+
+  details.fieldset > summary { min-height: var(--tap); font-size: var(--fs-sm); }
+  details.fieldset > summary .summary-chev .icon { width: 19px; height: 19px; }
+}
+
+/* ===================================================================== */
+/*  3. Áreas seguras (Dynamic Island, notch, barra de gestos)            */
+/* ===================================================================== */
+
+@media (max-width: 860px) {
+  .topbar {
+    padding: 10px var(--sp-4);
+    padding-top: calc(10px + var(--safe-t));
+    padding-left: calc(var(--sp-4) + var(--safe-l));
+    padding-right: calc(var(--sp-4) + var(--safe-r));
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+
+  /* Na vertical o título fica visível; a busca desce para a 2ª linha. */
+  .topbar .page-title {
+    display: block;
+    font-size: 1.7rem;
+    font-weight: 400;
+    letter-spacing: .03em;
+  }
+  .topbar .search { flex: 1 1 100%; max-width: none; order: 10; }
+  .topbar .search kbd { display: none; }
+  .topbar .search .input { min-height: var(--tap); }
+
+  .sidebar {
+    padding-top: calc(var(--sp-4) + var(--safe-t));
+    padding-bottom: calc(var(--sp-4) + var(--safe-b));
+    width: min(300px, 86vw);
+  }
+
+  .content {
+    padding: var(--sp-4) calc(var(--sp-4) + var(--safe-r))
+             calc(var(--tabbar-h) + var(--safe-b) + 24px)
+             calc(var(--sp-4) + var(--safe-l));
+    gap: var(--sp-4);
+  }
+
+  .tabbar {
+    padding: 5px calc(6px + var(--safe-l)) calc(5px + var(--safe-b)) calc(6px + var(--safe-r));
+  }
+  .tabbar button { min-height: 50px; padding: 7px 2px; font-size: 10.5px; gap: 4px; }
+  .tabbar button .icon { width: 22px; height: 22px; }
+
+  .toasts {
+    bottom: calc(var(--tabbar-h) + var(--safe-b) + 12px);
+    left: calc(var(--sp-4) + var(--safe-l));
+    right: calc(var(--sp-4) + var(--safe-r));
+  }
+
+  .gate {
+    padding: calc(var(--sp-5) + var(--safe-t)) calc(var(--sp-4) + var(--safe-r))
+             calc(var(--sp-5) + var(--safe-b)) calc(var(--sp-4) + var(--safe-l));
+  }
+  .gate-card { padding: var(--sp-6) var(--sp-5); }
+}
+
+/* ===================================================================== */
+/*  4. Modais em tela cheia                                              */
+/* ===================================================================== */
+
+@media (max-width: 860px) {
+  /* O modal cobre a tela toda: o desfoque do fundo ninguém vê, mas a placa
+     de vídeo continua calculando a cada quadro. */
+  dialog.modal::backdrop {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .modal-head {
+    padding: 13px var(--sp-4);
+    padding-top: calc(13px + var(--safe-t));
+    gap: var(--sp-2);
+  }
+  .modal-head h2 { font-size: var(--fs-lg); }
+
+  .modal-body {
+    padding: var(--sp-4);
+    gap: var(--sp-5);
+    /* O toque não deve "vazar" para a página atrás do modal. */
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .modal-body > *, .fieldset, .form-grid { min-width: 0; }
+  .filters-mobile { min-width: 0; }
+
+  .modal-foot {
+    padding: var(--sp-3) var(--sp-4) calc(var(--sp-3) + var(--safe-b));
+    gap: var(--sp-2);
+  }
+  /* A ação principal ocupa o espaço que sobra - polegar acerta sempre. */
+  .modal-foot .btn-primary { flex: 1 1 auto; }
+  .modal-foot .btn-ghost[data-close] { flex: 0 0 auto; }
+
+  /* Rodapé da ficha do pedido: Excluir vira só ícone para caber. */
+  .modal-foot [data-delete] span,
+  .modal-foot [data-print] span { display: none; }
+}
+
+/* ===================================================================== */
+/*  5. Painel                                                             */
+/* ===================================================================== */
+
+@media (max-width: 860px) {
+  /* Duas colunas no desktop, uma só no celular. */
+  .grid-dash { grid-template-columns: minmax(0, 1fr) !important; }
+
+  .grid-kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
+  .kpi { padding: var(--sp-3) var(--sp-4); min-width: 0; }
+  .kpi-value { font-size: var(--fs-xl); overflow-wrap: anywhere; }
+  .kpi-value.sm { font-size: var(--fs-lg); }
+  .kpi-label { font-size: var(--fs-xs); }
+  .kpi-foot { font-size: 10.5px; }
+
+  .grid-2, .grid-3 { grid-template-columns: minmax(0, 1fr); }
+
+  .card-head { padding: var(--sp-4); flex-wrap: wrap; gap: var(--sp-2); }
+  .card-body { padding: var(--sp-4); }
+
+  /* Funil em duas linhas: o rótulo deixa de ser cortado. */
+  .funnel-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 5px var(--sp-3);
+    min-height: var(--tap);
+    padding: 4px 0;
+  }
+  .funnel-label { grid-column: 1; grid-row: 1; font-size: var(--fs-md); }
+  .funnel-count { grid-column: 2; grid-row: 1; font-size: var(--fs-base); }
+  .funnel-bar { grid-column: 1 / -1; grid-row: 2; height: 10px; }
+
+  .rank-name { font-size: var(--fs-base); }
+  .rank-value { font-size: var(--fs-base); }
+}
+
+/* ===================================================================== */
+/*  6. Lista de pedidos: filtros e ações em lote                          */
+/* ===================================================================== */
+
+@media (max-width: 860px) {
+  /*
+   * Item de flex tem `min-width: auto` por padrão e por isso NÃO encolhe
+   * abaixo do próprio conteúdo - foi o que esticava a página inteira quando
+   * os chips passavam da largura da tela. `min-width: 0` devolve o controle.
+   */
+  .content > *,
+  .view,
+  .view > * { min-width: 0; }
+
+  .filters {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-3);
+    min-width: 0;
+  }
+
+  /* Chips de status rolam na horizontal, sem quebrar a página. */
+  .filter-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    min-width: 0;
+    max-width: 100%;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    /* sangra até a borda da tela: dá a dica visual de que há mais ao lado */
+    margin: 0 calc(-1 * var(--sp-4));
+    padding: 2px var(--sp-4);
+    scroll-snap-type: x proximity;
+  }
+  .filter-chips::-webkit-scrollbar { display: none; }
+  .filter-chips .chip { scroll-snap-align: start; flex: none; }
+
+  /* Os filtros avançados saem da barra e vão para uma folha. */
+  .filters-advanced { display: none; }
+  .filters-mobile { display: flex; gap: var(--sp-2); }
+  .filters-mobile .btn { flex: 1 1 auto; }
+
+  .filter-count {
+    display: inline-grid;
+    place-items: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: var(--r-full);
+    background: var(--accent);
+    color: var(--on-accent);
+    font-size: var(--fs-xs);
+    font-weight: 700;
+  }
+
+  /* Barra de seleção múltipla: flutua acima da barra de abas. */
+  .bulkbar {
+    position: fixed;
+    left: calc(var(--sp-3) + var(--safe-l));
+    right: calc(var(--sp-3) + var(--safe-r));
+    bottom: calc(var(--tabbar-h) + var(--safe-b) + 10px);
+    z-index: 31;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--sp-2);
+    padding: 10px var(--sp-3);
+    border-radius: var(--r-lg);
+  }
+  .bulkbar .btn { flex: 1 1 auto; min-height: var(--tap-sm); }
+  .bulkbar .bulk-label { flex: 1 0 100%; text-align: center; font-size: var(--fs-md); }
+}
+
+@media (min-width: 861px) {
+  .filters-mobile { display: none; }
+}
+
+/* ===================================================================== */
+/*  7. Cartões de pedido e cliente                                        */
+/* ===================================================================== */
+
+@media (max-width: 860px) {
+  .order-card { padding: 14px var(--sp-4); gap: 8px; }
+  .order-card .cell-primary { font-size: var(--fs-base); }
+  .order-card .btn-sm { min-height: var(--tap-sm); padding: 8px 14px; }
+
+  /* Nome longo quebra em duas linhas em vez de sumir com reticências. */
+  .order-card .cell-primary.truncate {
+    white-space: normal;
+    overflow: visible;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Item do pedido: detalhes em cima, valor e ações numa linha embaixo -
+     antes os botões espremiam as tags e a cor sumia atrás do preço. */
+  .item-row { grid-template-columns: minmax(0, 1fr); padding: var(--sp-3); gap: var(--sp-2); }
+  .item-numbers { justify-content: space-between; gap: var(--sp-2); }
+  .item-numbers > .right { text-align: left; }
+
+  /* Andamento numa linha que rola de lado (a etapa atual vem centrada):
+     antes eram quatro linhas de botões antes de chegar aos itens. */
+  .steps {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin: 0 calc(-1 * var(--sp-4));
+    padding: 0 var(--sp-4);
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+  .steps::-webkit-scrollbar { display: none; }
+  .step { flex: none; }
+  .steps .step-cancel { flex: none; margin-left: var(--sp-2); }
+
+  /* Botão de texto comprido numa fileira que quebra (ex.: "Restaurar pedidos
+     de um backup"): o texto quebra dentro do botão em vez de empurrar a tela
+     inteira para o lado no iPhone SE. */
+  .row.wrap > .btn { max-width: 100%; white-space: normal; text-align: center; }
+
+  .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
+  .detail-item dd { font-size: var(--fs-base); overflow-wrap: anywhere; }
+  .detail-item dd.truncate { white-space: normal; overflow: visible; }
+
+  .totals { padding: var(--sp-4); }
+  .totals-row { font-size: var(--fs-base); }
+
+  .section-head h2 { font-size: var(--fs-xl); }
+}
+
+/* ===================================================================== */
+/*  8. Seletor de produtos                                                */
+/* ===================================================================== */
+
+@media (max-width: 860px) {
+  .picker { gap: var(--sp-3); min-width: 0; }
+
+  /* O modal do celular tem respiro menor: a faixa presa acompanha. */
+  .picker-head {
+    top: calc(-1 * var(--sp-4));
+    margin: calc(-1 * var(--sp-4)) calc(-1 * var(--sp-4)) 0;
+    padding: var(--sp-4) var(--sp-4) var(--sp-3);
+    min-width: 0;
+  }
+  .picker-cats {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    min-width: 0;
+    max-width: none;
+    scrollbar-width: none;
+    margin: 0 calc(-1 * var(--sp-4));
+    padding: 2px var(--sp-4);
+    -webkit-overflow-scrolling: touch;
+  }
+  .picker-cats::-webkit-scrollbar { display: none; }
+  .picker-cats .chip { flex: none; }
+
+  /*
+   * A configuração agora abre numa folha própria ao tocar no modelo, então a
+   * grade pode ocupar o modal inteiro e rolar junto com ele.
+   */
+  .picker-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-2);
+  }
+  .pick-name { font-size: var(--fs-md); }
+  .pick-meta { font-size: 10.5px; }
+
+  .config-field > .label { font-size: var(--fs-sm); }
+
+  /* Ficha do item: chips grandes o bastante para o polegar. */
+  .item-editor { gap: var(--sp-4); }
+  .item-editor .form-grid { gap: var(--sp-3); }
+  .stepper { gap: 4px; }
+  .stepper .icon-btn { width: 40px; height: var(--tap); }
+  .stepper .input { padding-left: 4px; padding-right: 4px; }
+  .ie-extras > summary { min-height: var(--tap); font-size: var(--fs-md); }
+
+  /* Rodapé da ficha: total em cima, botões embaixo, cada um com espaço. */
+  .modal-panel.sheet .modal-foot { flex-wrap: wrap; }
+  .modal-panel.sheet .ie-total {
+    flex: 1 0 100%;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+}
+
+/* ===================================================================== */
+/*  9. Gráficos                                                           */
+/* ===================================================================== */
+
+@media (max-width: 860px) {
+  .chart-tip { min-width: 118px; font-size: var(--fs-md); padding: 9px 11px; }
+  .chart-axis text { font-size: 10.5px; }
+  .legend { gap: var(--sp-3); font-size: var(--fs-md); }
+}
+
+/* ===================================================================== */
+/*  10. Tabelas que viram lista no celular                                */
+/* ===================================================================== */
+
+.stack-list { display: none; }
+
+@media (max-width: 860px) {
+  .table-wrap.desktop-only { display: none; }
+  .stack-list { display: flex; flex-direction: column; }
+
+  .stack-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 3px var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--divider);
+  }
+  .stack-row:last-child { border-bottom: 0; }
+  .stack-title { font-weight: 560; font-size: var(--fs-base); overflow-wrap: anywhere; }
+  .stack-value { font-family: var(--font-num); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .stack-meta { grid-column: 1 / -1; font-size: var(--fs-sm); color: var(--text-3); }
+}
+
+/* ===================================================================== */
+/*  10b. Botão flutuante de "novo pedido"                                 */
+/*  No celular o canto superior direito é o ponto mais difícil de         */
+/*  alcançar com o polegar - ainda mais num 17 Pro Max. A ação principal  */
+/*  desce para perto da mão.                                              */
+/* ===================================================================== */
+
+.fab { display: none; }
+
+@media (max-width: 860px) {
+  .fab {
+    position: fixed;
+    right: calc(var(--sp-4) + var(--safe-r));
+    bottom: calc(var(--tabbar-h) + var(--safe-b) + 16px);
+    z-index: 32;
+    display: grid;
+    place-items: center;
+    width: 58px;
+    height: 58px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-full);
+    background: var(--accent);
+    color: var(--on-accent);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, .3), 0 2px 6px rgba(0, 0, 0, .18);
+    cursor: pointer;
+    transition: transform var(--t-fast), opacity var(--t-fast);
+  }
+  .fab .icon { width: 27px; height: 27px; stroke-width: 2.1; }
+  .fab:active { transform: scale(.92); }
+
+  /* Sai de cena quando a barra de seleção múltipla ocupa o mesmo canto,
+     e quando a gaveta de menu está aberta. */
+  :root[data-bulk='on'] .fab,
+  .app[data-drawer='open'] .fab { display: none; }
+}
+
+/* ===================================================================== */
+/*  11. Toque não tem "hover": o estado não pode grudar depois do tap    */
+/* ===================================================================== */
+
+@media (hover: none) {
+  .btn:hover { background: var(--surface-2); }
+  .btn-primary:hover { background: var(--accent); }
+  .btn-ghost:hover { background: transparent; color: var(--text-2); }
+  .btn-outline:hover { background: transparent; }
+  .btn-danger:hover { background: var(--danger-soft); color: var(--danger); }
+  .icon-btn:hover { background: transparent; color: var(--text-2); }
+  .nav-item:hover { background: transparent; color: var(--text-2); }
+  .nav-item[aria-current='page']:hover { background: var(--accent-soft); color: var(--accent-text); }
+  .chip:hover { border-color: var(--border); color: var(--text-2); }
+  .chip[aria-pressed='true']:hover { background: var(--accent); color: var(--on-accent); }
+  .pick:hover { border-color: var(--border); background: var(--surface); }
+  .pick[aria-pressed='true']:hover { background: var(--accent-soft); border-color: var(--accent-text); }
+  .segmented button:hover { color: var(--text-2); }
+  .segmented button[aria-pressed='true']:hover { color: var(--text); }
+  .step:hover { background: var(--surface-2); color: var(--text-3); }
+  .step.done:hover { background: var(--tone-green-bg); color: var(--tone-green-fg); }
+  .step.current:hover { background: var(--accent); color: var(--on-accent); }
+  table.data tbody tr:hover { background: transparent; }
+  .kpi:hover { box-shadow: var(--shadow-xs); }
+  .user-chip:hover { background: transparent; }
+  .input:hover, .select:hover, .textarea:hover { border-color: var(--border); }
+  .check:hover .box { border-color: var(--border-strong); }
+  .money-sensitive:hover { filter: blur(7px); }
+
+  /* Em compensação, o toque dá um retorno imediato. */
+  .btn:active, .chip:active, .pick:active, .nav-item:active,
+  .order-card:active, .funnel-row:active, .step:active { opacity: .62; }
+  :root[data-privacy='on'] .money-sensitive:active { filter: none; }
+}
+
+/* ===================================================================== */
+/*  12. Telas muito estreitas (iPhone 13/15 em uso de uma mão)           */
+/* ===================================================================== */
+
+@media (max-width: 400px) {
+  .grid-kpi { gap: var(--sp-2); }
+  .kpi { padding: var(--sp-3); }
+  .kpi-value { font-size: var(--fs-lg); }
+  .modal-foot { flex-wrap: wrap; }
+  .modal-foot .btn { flex: 1 1 auto; }
+}
+
+/* ===================================================================== */
+/*  13. Paisagem: o teclado come a tela, então tudo encolhe              */
+/* ===================================================================== */
+
+@media (max-width: 926px) and (orientation: landscape) and (max-height: 500px) {
+  .modal-panel { height: 100dvh; }
+  .modal-head { padding-top: calc(8px + var(--safe-t)); }
+  .modal-head h2 { font-size: var(--fs-md); }
+  .modal-head .sub { display: none; }
+  .topbar { min-height: 48px; }
+  .tabbar button span { display: none; }
+  .tabbar button { min-height: 40px; }
+  :root { --tabbar-h: 46px; }
+}
+
+/* Pagamentos: no celular o lançamento é a ação mais repetida do dia. */
+@media (max-width: 860px) {
+  .pay-row { padding: 12px var(--sp-3); gap: var(--sp-2); }
+  .pay-amount { font-size: var(--fs-lg); }
+  .pay-index { width: 26px; height: 26px; font-size: var(--fs-sm); }
+  .pay-summary { padding: var(--sp-4); }
+  .pay-summary .totals-row { font-size: var(--fs-base); }
+}
+
+/* ===================================================================== */
+/*  14. Telas da v2 (produtos, aparelhos, fotos, entradas, catálogo)     */
+/* ===================================================================== */
+
+@media (max-width: 860px) {
+  .m-row { min-height: 64px; padding: 10px 8px; }
+  .m-title { font-size: var(--fs-base); }
+
+  .product-hero { flex-direction: column; align-items: stretch; gap: 14px; }
+  .hero-photo { width: 100%; max-width: 280px; margin: 0 auto; }
+  .hero-numbers { gap: 10px 18px; }
+
+  .variant-row { min-height: 60px; padding: 10px 12px; }
+  .v-price-input { width: 132px; }
+  .unit-row { padding: 10px 6px 10px 12px; }
+  .unit-option { min-height: 54px; }
+
+  .gallery-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .gallery-tools .icon-btn.sm { width: 34px; height: 34px; }
+  .photo-frame { max-width: none; }
+
+  .unit-form-row .field { flex: 1 1 calc(50% - 8px); }
+  .unit-form-row .field.grow-2 { flex: 1 1 100%; }
+  .purchase-line { padding: 12px; }
+
+  .banner-btn { min-height: 56px; font-size: var(--fs-base); }
+  .cat-row .cat-order .icon-btn.sm { width: 36px; height: 30px; }
+  .qr-box { width: 200px; }
+  .segmented.tabs button { min-height: var(--tap-sm); }
+  .request-card .btn-sm { flex: 1 1 auto; }
+
+  /* o rodapé dos modais da v2 tem 3-4 botões: ícone + texto curto */
+  .modal-foot [data-vedit] span, .modal-foot [data-edit] span { display: inline; }
+}
+
+@media (max-width: 400px) {
+  .modal-foot [data-wa-summary] span, .modal-foot [data-pdf] span { display: none; }
+}
+
+/* ===================================================================== */
+/*  Ajustes de leitura no celular                                         */
+/* ===================================================================== */
+@media (max-width: 860px) {
+  /* o título da tela já está na barra de cima */
+  .section-head h2.is-dup-title { display: none; }
+  /* o botão "+" (novo pedido) flutua sobre a lista: o fim dela sobe acima dele */
+  .content { padding-bottom: calc(var(--tabbar-h) + var(--safe-b) + 92px); }
+  /* chave do catálogo ao lado do texto, não embaixo */
+  .catalog-status-head { flex-wrap: nowrap; align-items: flex-start; }
+}

@@ -1,0 +1,237 @@
+/* ============================ Reset + fundamentos ===================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  letter-spacing: -.011em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior-y: none;
+}
+
+h1, h2, h3, h4, h5, p, figure, blockquote, dl, dd { margin: 0; }
+ul, ol { margin: 0; padding: 0; list-style: none; }
+
+h1 { font-size: var(--fs-2xl); font-weight: 650; letter-spacing: -.024em; }
+h2 { font-size: var(--fs-xl); font-weight: 620; letter-spacing: -.02em; }
+h3 { font-size: var(--fs-lg); font-weight: 600; letter-spacing: -.015em; }
+
+a { color: var(--accent-text); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+img, svg, video { max-width: 100%; display: block; }
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--divider);
+  margin: var(--sp-5) 0;
+}
+
+code, kbd, .num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+::selection { background: var(--accent-soft); }
+
+/* Barra de rolagem discreta */
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border: 3px solid transparent;
+  border-radius: var(--r-full);
+  background-clip: content-box;
+}
+
+/* ------------------------------------------------------------ foco ---- */
+
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+/* --------------------------------------------------------- formulários  */
+
+input, select, textarea, button {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+
+label { display: block; }
+
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+/* `.search` nasceu como item da barra superior (flex em LINHA). Dentro de um
+   `.field`, que é coluna, seu `flex-basis: 320px` viraria 320px de ALTURA. */
+.field > .search { flex: 0 0 auto; width: 100%; max-width: none; }
+
+.field > .label,
+.label {
+  font-size: var(--fs-sm);
+  font-weight: 550;
+  color: var(--text-2);
+  letter-spacing: -.005em;
+}
+
+.hint {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  line-height: 1.45;
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  padding: 9px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-base);
+  color: var(--text);
+  transition: border-color var(--t-fast), box-shadow var(--t-fast), background var(--t-fast);
+  appearance: none;
+}
+
+.input::placeholder, .textarea::placeholder { color: var(--text-3); }
+
+.input:hover, .select:hover, .textarea:hover { border-color: var(--border-strong); }
+
+.input:focus, .select:focus, .textarea:focus {
+  border-color: var(--accent-text);
+  box-shadow: 0 0 0 3.5px var(--accent-ring);
+  outline: none;
+}
+
+.input:disabled, .select:disabled, .textarea:disabled {
+  background: var(--surface-2);
+  color: var(--text-3);
+  cursor: not-allowed;
+}
+
+.input[aria-invalid='true'], .textarea[aria-invalid='true'] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3.5px var(--danger-soft);
+}
+
+.textarea { resize: vertical; min-height: 80px; line-height: 1.55; }
+
+.select {
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%236e6e73' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6.5 8 10.5l4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 15px;
+  cursor: pointer;
+}
+
+:root[data-theme='dark'] .select,
+:root:not([data-theme='light']) .select,
+:root[data-theme='dark'] .input.has-combo,
+:root:not([data-theme='light']) .input.has-combo {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23a1a1a6' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6.5 8 10.5l4-4'/%3E%3C/svg%3E");
+}
+
+/* Campo de dinheiro com o "R$" grudado na esquerda */
+.money-input { position: relative; }
+.money-input > .input { padding-left: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+.money-input::before {
+  content: 'R$';
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: var(--fs-sm);
+  color: var(--text-3);
+  pointer-events: none;
+}
+
+input[type='date'].input { min-height: 38px; }
+input[type='date']::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .55; }
+:root[data-theme='dark'] input[type='date']::-webkit-calendar-picker-indicator { filter: invert(1); }
+
+/* --------------------------------------------------------- utilitários  */
+
+.row { display: flex; align-items: center; gap: var(--sp-3); }
+.row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.col { display: flex; flex-direction: column; }
+.wrap { flex-wrap: wrap; }
+.grow { flex: 1 1 auto; min-width: 0; }
+.gap-1 { gap: var(--sp-1); } .gap-2 { gap: var(--sp-2); }
+.gap-3 { gap: var(--sp-3); } .gap-4 { gap: var(--sp-4); }
+.gap-5 { gap: var(--sp-5); } .gap-6 { gap: var(--sp-6); }
+
+.muted { color: var(--text-2); }
+.dim { color: var(--text-3); }
+.small { font-size: var(--fs-sm); }
+.xs { font-size: var(--fs-xs); }
+.strong { font-weight: 600; }
+.nowrap { white-space: nowrap; }
+.right { text-align: right; }
+.center { text-align: center; }
+/*
+ * "Números da operação sempre em mono" - regra da identidade da rota44.
+ * A monoespaçada é o que faz o dado parecer laudo técnico em vez de anúncio.
+ */
+.mono { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.pos { color: var(--success); }
+.neg { color: var(--danger); }
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.hide { display: none !important; }
+
+@media (max-width: 860px) { .hide-mobile { display: none !important; } }
+@media (min-width: 861px) { .only-mobile { display: none !important; } }
+
+/* --------------------------------------------------------- animações -- */
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes rise    { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes pop     { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes sheet-up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes spin    { to { transform: rotate(360deg); } }
+@keyframes shimmer { to { background-position-x: -200%; } }
+
+.animate-rise { animation: rise var(--t-base) both; }
+.animate-fade { animation: fade-in var(--t-base) both; }
+
+/* Ícone sem tamanho definido pela tela: acompanha o texto (antes ficava do
+   tamanho do bloco - o "triângulo gigante" do Catálogo). */
+.icon { width: 1.2em; height: 1.2em; flex: none; vertical-align: -0.22em; }

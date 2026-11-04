@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR" data-privacy="off">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Rota 44 · Sistema</title>
+  <meta name="description" content="Sistema de gestão da Rota 44.">
+  <!-- Painel interno: não deve aparecer em buscador nenhum. -->
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#0b0b0c">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Rota 44">
+
+  <link rel="icon" href="assets/brand/escudo.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/brand/apple-touch.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preconnect" href="https://jjynilzpcekissqkbigj.supabase.co" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="modulepreload" href="assets/js/app.js">
+  <link rel="modulepreload" href="assets/js/core/data.js">
+  <link rel="modulepreload" href="assets/js/core/supabase.js">
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm">
+
+  <link rel="preload" href="assets/fonts/barlow-400-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/bebas-neue-400-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="assets/css/fonts.css">
+  <link rel="stylesheet" href="assets/css/tokens.css">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/layout.css">
+  <link rel="stylesheet" href="assets/css/components.css">
+  <link rel="stylesheet" href="assets/css/charts.css">
+  <link rel="stylesheet" href="assets/css/app.css">
+  <link rel="stylesheet" href="assets/css/rota.css">
+  <!-- Camada mobile/iOS por último: ela sobrescreve o que vem acima. -->
+  <link rel="stylesheet" href="assets/css/mobile.css">
+
+  <!-- Aplica o tema salvo antes da primeira pintura: evita o "flash" branco. -->
+  <script src="assets/js/preload-theme.js"></script>
+</head>
+<body>
+  <div id="app">
+    <div class="boot"><div class="spinner"></div></div>
+  </div>
+  <noscript>
+    <div style="padding:40px;text-align:center;font:15px system-ui">
+      <h1>JavaScript desativado</h1>
+      <p>Este sistema precisa de JavaScript para funcionar. Ative nas configurações do navegador.</p>
+    </div>
+  </noscript>
+  <script type="module" src="assets/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /sistema
+
+Sitemap: https://rota-44.netlify.app/sitemap.xml

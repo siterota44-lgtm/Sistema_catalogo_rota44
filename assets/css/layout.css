@@ -1,0 +1,327 @@
+/* ========================= Estrutura do aplicativo ==================== */
+
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  min-height: 100dvh;
+}
+
+/* ------------------------------------------------------------ sidebar - */
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4) var(--sp-3);
+  background: var(--surface);
+  border-right: 1px solid var(--divider);
+  z-index: 40;
+  /* Menu maior que a tela (celular deitado, notebook baixo): rola por
+     dentro, sem arrastar a página de trás. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.sidebar > * { flex-shrink: 0; }
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: var(--sp-2) var(--sp-3) var(--sp-4);
+}
+
+.nav { display: flex; flex-direction: column; gap: 2px; }
+
+.nav-section {
+  padding: var(--sp-4) var(--sp-3) 6px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px var(--sp-3);
+  border: 0;
+  width: 100%;
+  background: transparent;
+  border-radius: var(--r-sm);
+  color: var(--text-2);
+  font-size: var(--fs-md);
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.nav-item:hover { background: var(--surface-hover); color: var(--text); }
+.nav-item[aria-current='page'] {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 570;
+}
+.nav-item .icon { width: 18px; height: 18px; flex: none; }
+.nav-item .count {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+  background: var(--surface-2);
+  padding: 1px 7px;
+  border-radius: var(--r-full);
+}
+.nav-item[aria-current='page'] .count { background: var(--surface); color: var(--accent-text); }
+
+.sidebar-foot { margin-top: auto; padding-top: var(--sp-3); border-top: 1px solid var(--divider); }
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px var(--sp-3);
+  border: 0;
+  background: transparent;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--t-fast);
+}
+.user-chip:hover { background: var(--surface-hover); }
+
+.avatar {
+  width: 28px; height: 28px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+}
+
+/* ------------------------------------------------------------- topbar - */
+
+.main { display: flex; flex-direction: column; min-width: 0; }
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: var(--topbar-h);
+  padding: var(--sp-3) var(--sp-6);
+  background: var(--glass);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--divider);
+}
+
+.topbar h1 { font-size: var(--fs-xl); }
+.topbar-sub { font-size: var(--fs-sm); color: var(--text-3); }
+
+.search {
+  position: relative;
+  flex: 1 1 320px;
+  max-width: 420px;
+}
+.search .input { padding-left: 34px; border-radius: var(--r-full); background: var(--surface-2); }
+.search .input:focus { background: var(--surface); }
+.search .icon {
+  position: absolute;
+  left: 11px; top: 50%;
+  transform: translateY(-50%);
+  width: 16px; height: 16px;
+  color: var(--text-3);
+  pointer-events: none;
+}
+.search kbd {
+  position: absolute;
+  right: 10px; top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--text-3);
+  background: var(--surface-3);
+  border-radius: var(--r-xs);
+  padding: 2px 5px;
+  pointer-events: none;
+}
+.search .input:focus ~ kbd { opacity: 0; }
+
+/* ---------------------------------------------------------- conteúdo -- */
+
+.content {
+  flex: 1;
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.view { display: flex; flex-direction: column; gap: var(--sp-5); animation: rise var(--t-base) both; }
+/* Caixa ainda vazia (avisos, pedidos do catálogo, seleção) não abre espaço. */
+.view > :empty { display: none; }
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.section-head h2 { font-size: var(--fs-lg); }
+
+.grid { display: grid; gap: var(--sp-4); }
+.grid-kpi { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.grid-2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.grid-3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+
+/* ------------------------------------------------- barra inferior (mob) */
+
+.tabbar { display: none; }
+
+@media (max-width: 860px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: 280px;
+    transform: translateX(-100%);
+    transition: transform var(--t-base);
+    box-shadow: var(--shadow-lg);
+  }
+  .app[data-drawer='open'] .sidebar { transform: none; }
+
+  .scrim {
+    position: fixed;
+    inset: 0;
+    background: var(--overlay);
+    z-index: 35;
+    animation: fade-in var(--t-fast) both;
+  }
+
+  .topbar { padding: var(--sp-3) var(--sp-4); }
+  .content { padding: var(--sp-4) var(--sp-4) 92px; gap: var(--sp-4); }
+
+  .tabbar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 30;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 2px;
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    background: var(--glass);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-top: 1px solid var(--divider);
+  }
+  .tabbar button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 6px 2px;
+    border: 0;
+    background: transparent;
+    border-radius: var(--r-sm);
+    color: var(--text-3);
+    font-size: 10px;
+    font-weight: 550;
+    cursor: pointer;
+  }
+  .tabbar button .icon { width: 21px; height: 21px; }
+  .tabbar button[aria-current='page'] { color: var(--accent-text); }
+}
+
+/* ----------------------------------------------------------- telas de  */
+/* ------------------------------------------------ login / configuração  */
+
+.gate {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-5);
+  background:
+    radial-gradient(1100px 620px at 50% -10%, var(--accent-soft), transparent 62%),
+    var(--bg);
+}
+
+.gate-card {
+  width: 100%;
+  max-width: 400px;
+  padding: var(--sp-7);
+  background: var(--surface);
+  border: 1px solid var(--divider);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+  animation: pop var(--t-slow) both;
+}
+
+.gate-card.wide { max-width: 520px; }
+
+.gate-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-6);
+  text-align: center;
+}
+.gate-brand .brand-mark { width: 56px; height: 56px; border-radius: 15px; }
+.gate-brand .brand-wordmark { width: 150px; height: 42px; margin: 0 auto; }
+.gate-brand h1 { font-size: var(--fs-xl); }
+.gate-brand p {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  font-family: var(--font-num);
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  margin-top: 6px;
+}
+
+.gate-form { display: flex; flex-direction: column; gap: var(--sp-4); }
+
+.gate-foot {
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--divider);
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  text-align: center;
+  line-height: 1.6;
+}
+.gate-foot .icon { width: 14px; height: 14px; vertical-align: -2px; }
+
+/* Tela cheia de carregamento inicial */
+.boot {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  z-index: 100;
+}
+
+@media print {
+  .sidebar, .topbar, .tabbar, .no-print { display: none !important; }
+  .app { grid-template-columns: 1fr; }
+  .content { padding: 0; max-width: none; }
+  body { background: #fff; }
+}

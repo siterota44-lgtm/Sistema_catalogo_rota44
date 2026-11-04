@@ -1,0 +1,167 @@
+# Mantém o Supabase acordado + backup diário do banco da Rota 44.
+#
+# Por que existe: no plano grátis o Supabase PAUSA o projeto depois de ~7 dias
+# sem acesso e NÃO faz backup. Este workflow roda todo dia e:
+#
+#   1. Sinal de vida (sempre, sem configurar nada): chama a função pública
+#      keepalive() do banco com a publishable key (a mesma que já está no
+#      site - não é segredo). Só devolve a hora do servidor, nenhum dado.
+#   2. Backup (quando os secrets existirem): os DADOS da loja (1_dados.sql),
+#      o login (2_login.sql) e a estrutura de referência (0_estrutura.sql) →
+#      tar.gz → criptografado com senha (AES-256) → artefato por 30 dias.
+#      O repositório é PÚBLICO: o arquivo só abre com a BACKUP_PASSPHRASE, e o
+#      log mostra apenas nomes de tabela, nunca dado de cliente.
+#      A restauração é testada em tests/db/backup.test.mjs com estes mesmos
+#      parâmetros (DATA_ARGS / LOGIN_ARGS abaixo).
+#   3. Repositório público 60 dias sem commit? O GitHub desliga os
+#      agendamentos. Um commit vazio a cada ~50 dias evita isso.
+#
+# Para ligar o backup (uma vez só) - passo a passo no README ("Backup"):
+#   GitHub → repositório → Settings → Secrets and variables → Actions → New repository secret:
+#     SUPABASE_DB_URL     connection string "Session pooler" (Supabase → Connect)
+#     BACKUP_PASSPHRASE   senha longa para criptografar (guarde num cofre de senhas!)
+#
+# Sem os secrets, o sinal de vida roda igual e o backup só avisa e pula.
+
+name: Supabase acordado + backup
+
+on:
+  schedule:
+    - cron: '23 9 * * *'    # 06:23 em Brasília, todo dia
+  workflow_dispatch: {}      # botão "Run workflow" para rodar na hora
+
+permissions:
+  contents: write            # só para o commit vazio do passo 3
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+env:
+  # Públicos (iguais aos de assets/js/config.js). Ao trocar de projeto, trocar aqui também.
+  SUPABASE_URL: https://jjynilzpcekissqkbigj.supabase.co
+  SUPABASE_PUBLISHABLE_KEY: sb_publishable_VuIb8VQW_25fDUxTk1O81Q_40Cl9ES0
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Sinal de vida no Supabase
+        run: |
+          set -u
+          for i in 1 2 3; do
+            code=$(curl -s -o resp.txt -w '%{http_code}' -X POST \
+              "$SUPABASE_URL/rest/v1/rpc/keepalive" \
+              -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+              -H "Content-Type: application/json" -d '{}')
+            echo "tentativa $i: HTTP $code - $(head -c 300 resp.txt)"
+            if [ "$code" = "200" ]; then exit 0; fi
+            if [ "$code" = "404" ]; then
+              echo "::error::A função keepalive() não existe: rode o supabase/schema.sql no SQL Editor do Supabase."
+              exit 1
+            fi
+            sleep 20
+          done
+          echo "::error::O Supabase não respondeu. Se o projeto foi pausado, entre no painel e clique em 'Restore project'."
+          exit 1
+
+  backup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Conferir configuração
+        id: cfg
+        env:
+          DB: ${{ secrets.SUPABASE_DB_URL }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$DB" ] || [ -z "$PASS" ]; then
+            echo "::notice::Backup não configurado (faltam os secrets SUPABASE_DB_URL e BACKUP_PASSPHRASE). Veja o README, seção Backup."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.ok == 'true'
+        with:
+          sparse-checkout: supabase
+
+      - name: Instalar cliente do PostgreSQL 17
+        if: steps.cfg.outputs.ok == 'true'
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+
+      - name: Gerar e criptografar o backup
+        if: steps.cfg.outputs.ok == 'true'
+        env:
+          DB: ${{ secrets.SUPABASE_DB_URL }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+          # Só DADOS (a estrutura vem do supabase/schema.sql). INSERT com nome
+          # das colunas: abre em qualquer Postgres e até no SQL Editor.
+          # ATENÇÃO: não junte --schema e --table no mesmo pg_dump - com
+          # --table ele ignora o --schema e salva só a tabela.
+          DATA_ARGS: --data-only --column-inserts --rows-per-insert=200 --no-owner --no-privileges --schema=public
+          LOGIN_ARGS: --data-only --column-inserts --no-owner --no-privileges --table=auth.users --table=auth.identities
+        run: |
+          set -euo pipefail
+          umask 077
+          PGD=/usr/lib/postgresql/17/bin/pg_dump
+          STAMP=$(date -u +%Y-%m-%d_%H%M)
+          DIR=$(mktemp -d)
+          { cat supabase/backup_prelude.sql
+            $PGD "$DB" $DATA_ARGS
+            echo 'reset all;'  # gatilhos e sessão de volta ao normal
+          } > "$DIR/1_dados.sql"
+          { echo 'set session_replication_role = replica;'
+            $PGD "$DB" $LOGIN_ARGS
+            echo 'reset all;'
+          } > "$DIR/2_login.sql"
+          $PGD "$DB" --schema-only --no-owner --no-privileges --schema=public > "$DIR/0_estrutura.sql"
+          # Confere que veio o que importa (um backup vazio "verde" não serve para nada).
+          for t in store_settings store_members categories products product_variants; do
+            grep -q "INSERT INTO public.$t " "$DIR/1_dados.sql" || { echo "::error::Backup sem a tabela $t"; exit 1; }
+          done
+          grep -q "INSERT INTO auth.users " "$DIR/2_login.sql" || { echo "::error::Backup sem o login"; exit 1; }
+          echo "tabelas no backup:"; grep -o '^INSERT INTO [a-z_.]*' "$DIR/1_dados.sql" | sort | uniq -c
+          FILE="rota44-${STAMP}.tar.gz"
+          tar -czf "$FILE" -C "$DIR" .
+          rm -rf "$DIR"
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$PASS" --symmetric --cipher-algo AES256 -o "$FILE.gpg" "$FILE"
+          rm -f "$FILE"
+          echo "BACKUP_FILE=$FILE.gpg" >> "$GITHUB_ENV"
+          ls -lh "$FILE.gpg"
+
+      - name: Guardar (30 dias)
+        if: steps.cfg.outputs.ok == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-${{ github.run_id }}
+          path: ${{ env.BACKUP_FILE }}
+          retention-days: 30
+          if-no-files-found: error
+
+  repo-activity:
+    # Só em repositório público (o GitHub desliga agendamento após 60 dias sem atividade).
+    if: github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Commit vazio se o último tiver mais de 50 dias
+        run: |
+          last=$(git log -1 --format=%ct)
+          now=$(date +%s)
+          days=$(( (now - last) / 86400 ))
+          echo "último commit há $days dias"
+          if [ "$days" -ge 50 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "chore: manter o agendamento do backup ativo"
+            git push
+          fi

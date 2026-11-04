@@ -5,10 +5,9 @@ import { esc, parseMoney, moneyInputValue, maskPhone, onlyDigits } from '../core
 import { friendlyError } from '../core/errors.js';
 import { icon } from './icons.js';
 import { toast, toastError, withLoading } from './kit.js';
-import { $, head, field, moneyInput, switchField, readForm, catalogUrl, mountPhoto, optionsMap, badge } from './common.js';
+import { $, head, field, moneyInput, switchField, readForm, catalogUrl, optionsMap, badge } from './common.js';
 
 export function mount(host) {
-  let hero;
   const url = catalogUrl();
 
   function checklist() {
@@ -59,11 +58,10 @@ export function mount(host) {
           <div class="fieldset">
             <div class="fieldset-title">Topo do catálogo</div>
             <div class="form-grid">
-              ${field('Aviso na faixa do topo', `<input class="input" name="announcement" value="${esc(s.announcement)}" placeholder="Frete grátis acima de R$ 299 · 5% no Pix">`, 12)}
-              ${field('Título grande', `<input class="input" name="hero_title" value="${esc(s.hero_title)}" placeholder="DIRETO DAS RUAS">`, 6)}
-              ${field('Frase embaixo', `<input class="input" name="hero_subtitle" value="${esc(s.hero_subtitle)}" placeholder="Rap, skate e trap em cada peça">`, 6)}
-              <div class="field span-12"><label class="label">Foto do topo (opcional: sem foto, fica o muro de grafite)</label><div data-hero></div></div>
+              ${field('Frase embaixo do nome', `<input class="input" name="tagline" value="${esc(s.tagline)}" placeholder="Streetwear das ruas: rap, skate e trap.">`, 6)}
+              ${field('Aviso na faixa vermelha', `<input class="input" name="announcement" value="${esc(s.announcement)}" placeholder="Frete grátis acima de R$ 299 · 5% no Pix">`, 6)}
             </div>
+            <p class="xs dim">Para escolher o que vai nos Destaques: em Produtos, abra a peça e marque "Destaque no topo do catálogo".</p>
           </div>
           <div class="fieldset">
             <div class="fieldset-title">Regras da vitrine</div>
@@ -89,7 +87,6 @@ export function mount(host) {
           <div class="row" style="justify-content:flex-end"><button type="button" class="btn btn-primary" data-save>Salvar catálogo</button></div>
         </form>
       </div>`;
-    hero = mountPhoto($('[data-hero]', host), { value: s.hero_image, label: 'Topo do catálogo' });
     drawQR();
   }
 
@@ -140,7 +137,7 @@ export function mount(host) {
         const v = readForm($('[data-f]', host));
         try {
           await Data.saveSettings({
-            announcement: v.announcement, hero_title: v.hero_title, hero_subtitle: v.hero_subtitle, hero_image: hero.value,
+            announcement: v.announcement, tagline: v.tagline,
             sold_out_behavior: v.sold_out_behavior, low_stock_threshold: Number(v.low_stock_threshold) || 0, new_days: Number(v.new_days) || 0,
             pix_discount_pct: parseMoney(v.pix_discount_pct), max_installments: Number(v.max_installments) || 1, free_shipping_over: parseMoney(v.free_shipping_over),
             show_low_count: v.show_low_count, about: v.about, exchange_policy: v.exchange_policy, shipping_info: v.shipping_info, privacy_policy: v.privacy_policy,

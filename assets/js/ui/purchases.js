@@ -70,11 +70,18 @@ function openPurchase(id) {
       ${items.some((i) => i.qty_received > 0) ? `<button class="btn" data-labels>${icon('print')} Etiquetas</button>` : ''}
       ${p.status === 'rascunho' || p.status === 'enviado' ? `<button class="btn" data-edit>${icon('edit')} Editar</button>` : ''}
       ${['rascunho', 'enviado'].includes(p.status) && Data.canMargin() ? '<button class="btn btn-danger" data-cancel>Cancelar pedido</button>' : ''}
+      ${p.status === 'parcial' && Data.canMargin() ? '<button class="btn" data-close-rest>Encerrar sem o restante</button>' : ''}
       ${open ? `<button class="btn btn-primary" data-receive>${icon('truck')} Receber</button>` : ''}`;
   };
   m.panel.addEventListener('click', async (e) => {
     if (e.target.closest('[data-edit]')) { openPurchaseForm(Data.purchase(id), draw); return; }
     if (e.target.closest('[data-receive]')) { openReceive(id, draw); return; }
+    if (e.target.closest('[data-close-rest]')) {
+      if (await confirmDialog({ title: 'Encerrar este pedido?', message: 'O que falta não vem mais. O que já chegou continua no estoque.', confirmText: 'Encerrar', cancelText: 'Voltar' })) {
+        try { await Data.closePurchase(id); toast('Pedido encerrado'); draw(); } catch (err) { toastError('Não deu', friendlyError(err)); }
+      }
+      return;
+    }
     if (e.target.closest('[data-labels]')) {
       openLabels(Data.purchaseItems(id).filter((i) => i.qty_received > 0).map((i) => ({ variant_id: i.variant_id, qty: i.qty_received })));
       return;

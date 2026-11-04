@@ -4,13 +4,14 @@
  */
 
 import * as Data from '../core/data.js';
-import { esc, money, formatDateTime, formatDate, todayISO, addDays, debounce } from '../core/utils.js';
+import { esc, money, parseMoney, moneyInputValue, formatDateTime, formatDate, todayISO, addDays, debounce } from '../core/utils.js';
 import { MOVEMENT_TYPES } from '../core/constants.js';
 import { friendlyError } from '../core/errors.js';
 import { icon } from './icons.js';
 import { toast, toastError, openModal, withLoading, confirmDialog } from './kit.js';
 import { $, $$, moneyHTML, badge, table, head, field, categoryOptions, paged, dot, matches, exportCSV, emptyBox, optionsMap } from './common.js';
 import { openScanner } from './scanner.js';
+import { openLabels } from './labels.js';
 
 const TABS = { posicao: 'Posição', repor: 'Repor', parados: 'Parados', contagem: 'Contagem' };
 
@@ -36,7 +37,7 @@ export function mount(host) {
     const value = canCost ? Data.stockValue() : null;
     host.innerHTML = `
       <div class="view">
-        ${head('Estoque', '', `<button class="btn" data-export>${icon('download')} CSV</button>`)}
+        ${head('Estoque', '', `<button class="btn" data-export>${icon('download')} CSV</button>${canCost ? `<button class="btn btn-primary" data-entry>${icon('plus')} Entrada de estoque</button>` : ''}`)}
         ${value ? `<div class="grid grid-kpi">
           <div class="kpi"><span class="kpi-label">Peças</span><span class="kpi-value sm">${value.units}</span></div>
           <div class="kpi"><span class="kpi-label">Valor a custo</span><span class="kpi-value sm money-sensitive">${esc(money(value.cost))}</span></div>
@@ -117,6 +118,7 @@ export function mount(host) {
     const t = e.target.closest('[data-tab]');
     if (t) { tab = t.dataset.tab; render(); return; }
     if (e.target.closest('[data-more]')) { limit += 60; drawBody(); return; }
+    if (e.target.closest('[data-entry]')) { openStockEntry(null, drawBody); return; }
     if (e.target.closest('[data-export]')) {
       exportCSV(`estoque-rota44-${todayISO()}.csv`, rowsFiltered().map((v) => ({
         produto: Data.product(v.product_id).name, cor: Data.color(v.color_id)?.name, tamanho: Data.size(v.size_id)?.label, sku: v.sku, codigo_barras: v.barcode,
@@ -173,6 +175,96 @@ export function stockGridHTML(productId) {
         }).join('')}
       </tr>`).join('')}</tbody>
     </table></div>`;
+}
+
+/* ------------------------------------------------- entrada rápida ------ */
+
+/**
+ * Chegou peça: escolhe o produto, digita quantas de cada na grade e pronto.
+ * Sem pedido de compra. Soma ao que já tem e atualiza o custo médio.
+ */
+export function openStockEntry(productId, done) {
+  let current = productId;
+  const m = openModal({
+    title: 'Entrada de estoque',
+    subtitle: 'Soma ao que já tem. Fica no histórico.',
+    size: 'lg',
+    body: '<div data-b></div>',
+    footer: '<button class="btn" data-close>Cancelar</button><button class="btn btn-primary" data-go>Dar entrada</button>',
+  });
+  const box = $('[data-b]', m.panel);
+
+  function drawSearch() {
+    m.foot.querySelector('[data-go]').hidden = true;
+    box.innerHTML = `
+      <div class="col gap-3">
+        <input class="input" data-q placeholder="Produto, SKU ou código de barras" autocomplete="off" data-autofocus aria-label="Buscar produto">
+        <div data-found></div>
+      </div>`;
+    const list = (q) => {
+      const rows = (q ? Data.searchProducts(q) : Data.products().filter((p) => p.status === 'ativo')).slice(0, 12);
+      $('[data-found]', box).innerHTML = rows.length ? `<div class="mobile-list">${rows.map((p) => `
+        <button type="button" class="m-row link-like" data-pick="${esc(p.id)}" style="width:100%">
+          <span class="m-main"><span class="m-title">${esc(p.name)}</span><span class="m-sub">${Data.productStock(p.id)} disponíveis</span></span>
+          ${icon('chevronRight')}
+        </button>`).join('')}</div>` : emptyBox('Nada encontrado');
+    };
+    $('[data-q]', box).addEventListener('input', (e) => list(e.target.value));
+    $('[data-q]', box).focus();
+    list('');
+  }
+
+  function drawGrid_() {
+    const p = Data.product(current);
+    const vs = Data.variantsOf(current).filter((v) => v.active);
+    const colorIds = [...new Set(vs.map((v) => v.color_id))];
+    const sizeIds = [...new Set(vs.map((v) => v.size_id))].sort((a, b) => (Data.size(a)?.sort || 0) - (Data.size(b)?.sort || 0));
+    const last = vs.map((v) => Number(Data.cost(v.id)?.last_cost || 0)).find(Boolean) || 0;
+    m.foot.querySelector('[data-go]').hidden = false;
+    box.innerHTML = `
+      <div class="col gap-3">
+        <div class="row-between" style="flex-wrap:wrap"><b>${esc(p.name)}</b>${productId ? '' : '<button type="button" class="btn btn-ghost btn-sm" data-change>Trocar produto</button>'}</div>
+        <div class="grid-matrix"><table>
+          <thead><tr><th>Quantas chegaram</th>${sizeIds.map((s) => `<th>${esc(Data.size(s)?.label)}</th>`).join('')}</tr></thead>
+          <tbody>${colorIds.map((c) => `<tr>
+            <th><span class="with-dot">${dot(Data.color(c)?.hex)} ${esc(Data.color(c)?.name)}</span></th>
+            ${sizeIds.map((s) => {
+              const v = vs.find((x) => x.color_id === c && x.size_id === s);
+              return `<td>${v ? `<input class="input" type="number" inputmode="numeric" min="0" data-qty="${esc(v.id)}" placeholder="${v.on_hand}" aria-label="${esc(Data.variantLabel(v))}, tem ${v.on_hand}">` : ''}</td>`;
+            }).join('')}
+          </tr>`).join('')}</tbody>
+        </table></div>
+        <p class="xs dim">O número apagado é o que já tem.</p>
+        <div class="form-grid">
+          ${field('Custo de cada peça', `<div class="money-input"><input class="input" data-cost inputmode="numeric" value="${last ? esc(moneyInputValue(last)) : ''}"></div>`, 6, 'Deixe vazio se não souber: o custo médio não muda.')}
+          ${field('De onde veio (opcional)', '<input class="input" data-reason placeholder="Confecção da Rua">', 6)}
+        </div>
+      </div>`;
+  }
+
+  const draw = () => (current ? drawGrid_() : drawSearch());
+  m.panel.addEventListener('click', (e) => {
+    const pick = e.target.closest('[data-pick]');
+    if (pick) { current = pick.dataset.pick; draw(); return; }
+    if (e.target.closest('[data-change]')) { current = null; draw(); return; }
+    const go = e.target.closest('[data-go]');
+    if (!go) return;
+    withLoading(go, async () => {
+      const cost = parseMoney($('[data-cost]', m.panel).value);
+      const items = $$('[data-qty]', m.panel).map((el) => ({ variant_id: el.dataset.qty, qty: Number(el.value) || 0, unit_cost: cost || null })).filter((x) => x.qty > 0);
+      if (!items.length) { toast('Digite a quantidade em ao menos um tamanho', { kind: 'warn' }); return; }
+      try {
+        const r = await Data.quickStockEntry({ items, reason: $('[data-reason]', m.panel).value });
+        m.close();
+        toast('Entrada lançada', { text: `${r.pieces} peça${r.pieces === 1 ? '' : 's'}` });
+        done?.();
+        if (await confirmDialog({ title: 'Imprimir as etiquetas agora?', confirmText: 'Imprimir', cancelText: 'Agora não' })) {
+          openLabels(items.map(({ variant_id, qty }) => ({ variant_id, qty })));
+        }
+      } catch (err) { toastError('Não consegui lançar', friendlyError(err)); }
+    });
+  });
+  draw();
 }
 
 /* ------------------------------------------------- ficha da variação --- */

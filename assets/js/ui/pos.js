@@ -48,6 +48,8 @@ export function prefillCart(partial) {
 }
 
 export function mount(host) {
+  // peça que saiu do cadastro não fica presa no rascunho
+  cart.items = cart.items.filter((i) => Data.variant(i.variant_id));
   let category = '';
   let query = '';
   let limit = 60;
@@ -380,7 +382,7 @@ export function mount(host) {
     });
     m.foot.querySelector('[data-ok]').addEventListener('click', () => {
       const q = (n) => m.panel.querySelector(`[name=${n}]`).value;
-      Object.assign(cart, { mode: 'pedido', channel: q('channel'), delivery_method: q('delivery'), shipping_fee: parseMoney(q('shipping')), address: q('address').trim(), notes: q('notes').trim() });
+      Object.assign(cart, { mode: 'pedido', use_pix: false, channel: q('channel'), delivery_method: q('delivery'), shipping_fee: parseMoney(q('shipping')), address: q('address').trim(), notes: q('notes').trim() });
       m.close();
       renderCart();
     });
@@ -438,6 +440,21 @@ export function mount(host) {
   }
 
   async function checkout() {
+    // cupom em % muda com o carrinho: confere de novo antes de cobrar
+    if (cart.coupon_code) {
+      const t = totals();
+      try {
+        const r = await Data.checkCoupon(cart.coupon_code, t.gross - t.itemsDiscount - t.manual, cart.customer_id || null);
+        cart.coupon_discount = Number(r.discount);
+        renderCart();
+      } catch (err) {
+        cart.coupon_code = '';
+        cart.coupon_discount = 0;
+        renderCart();
+        toastError('Cupom retirado', friendlyError(err));
+        return;
+      }
+    }
     if (cart.mode === 'pedido') {
       const btn = $('[data-checkout]', host);
       await withLoading(btn, () => submit({ ...basePayload(), status: 'aguardando_pagamento' }));

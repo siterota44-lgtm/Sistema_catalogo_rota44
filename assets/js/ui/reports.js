@@ -204,7 +204,7 @@ export function mount(host) {
   }
 
   function drawReturns(box) {
-    const rets = Data.returns().filter((r) => r.created_at.slice(0, 10) >= from && r.created_at.slice(0, 10) <= to);
+    const rets = Data.returns().filter((r) => { const d = todayISO(new Date(r.created_at)); return d >= from && d <= to; });
     const byReason = new Map(); const byProduct = new Map();
     for (const r of rets) {
       bump(byReason, RETURN_REASONS[r.reason] || r.reason, 1);

@@ -35,6 +35,10 @@ await page.waitForSelector('.app');
 ok(await page.isVisible('[data-route=financeiro]'), 'admin vê o Financeiro no menu');
 await shot(page, 'painel-dark');
 
+section('Painel: primeiros passos e atalhos');
+ok((await page.locator('.step-row:not(.is-ok)').count()) >= 3, 'loja nova vê o que falta fazer');
+ok((await page.locator('.quick').count()) === 5, 'atalhos do dia a dia');
+
 section('Ajustes da loja');
 await nav(page, 'ajustes');
 await page.fill('[data-store] [name=whatsapp]', '44999990000');
@@ -70,6 +74,7 @@ await page.fill('[data-f] [name=base_price]', '28990');
 await page.fill('[data-f] [name=cost]', '11000');
 await page.waitForTimeout(50);
 ok((await page.textContent('[data-margin]')).includes('%'), 'margem aparece ao digitar custo e preço');
+await page.click('[data-f] details summary:has-text("Detalhes da peça")');
 await page.fill('[data-f] [name=gsm]', '420');
 // foto de verdade: gerada no canvas e enviada pelo campo
 const png = await page.evaluate(() => {
@@ -88,6 +93,7 @@ ok(molV.length === 12, `gravou 12 variações (2 foram desmarcadas), veio ${molV
 ok(/^R44-MOL-GEN-\d{3}-(PRT|VIN)-/.test(molV[0].sku), `SKU automático: ${molV[0].sku}`);
 ok(molV.every((v) => v.on_hand === 4), 'estoque inicial entrou em cada variação');
 ok(mol.cover_url.includes('/storage/v1/object/public/produtos/'), 'foto subiu para o Storage e virou capa');
+ok(mol.status === 'ativo' && mol.catalog_visible, 'já entra ativo e à mostra');
 ok(n((await one(`select avg_cost from public.variant_costs where variant_id=$1`, [molV[0].id])).avg_cost) === 110, 'custo gravado');
 const V = molV[0];
 
@@ -180,6 +186,13 @@ await page.waitForTimeout(100);
 await page.click('[data-step=em_separacao]');
 await toastWith(page, 'Situação atualizada');
 ok((await one(`select status from public.sales where id=$1`, [onl.id])).status === 'em_separacao', 'funil anda pela ficha');
+
+section('Próximo passo na lista');
+await closeTop(page);
+await page.waitForSelector(`tr[data-open="${onl.id}"] [data-next]`);
+ok((await page.textContent(`tr[data-open="${onl.id}"] [data-next]`)).includes('Enviar'), 'venda em separação oferece Enviar');
+await page.click(`tr[data-open="${onl.id}"]`);
+await modalOpen(page);
 
 section('Cancelar com estorno');
 await page.click('[data-cancel]');
@@ -329,6 +342,23 @@ ok(true, 'ajuste sem motivo é recusado na tela');
 await closeTop(page);
 await closeTop(page);
 
+section('Entrada rápida de estoque');
+await nav(page, 'estoque');
+await page.click('[data-entry]');
+await page.waitForSelector('dialog.modal[open] [data-pick]');
+await page.fill('dialog.modal[open] [data-q]', 'moletom');
+await page.waitForTimeout(60);
+await page.click('dialog.modal[open] [data-pick]');
+await page.waitForSelector(`[data-qty="${molV[4].id}"]`);
+await shot(page, 'entrada-rapida-dark');
+const hand = (await one(`select on_hand from public.product_variants where id=$1`, [molV[4].id])).on_hand;
+await page.fill(`[data-qty="${molV[4].id}"]`, '5');
+await page.click('dialog.modal[open] [data-go]');
+await page.waitForSelector('.modal-head h2:has-text("Imprimir as etiquetas")');
+ok((await one(`select on_hand from public.product_variants where id=$1`, [molV[4].id])).on_hand === hand + 5, 'chegou peça: soma ao estoque em uma tela');
+await page.click('dialog.modal[open] [data-cancel]');
+await page.waitForTimeout(80);
+
 section('Promoção e cupom');
 await nav(page, 'promocoes');
 await page.click('[data-new]');
@@ -431,93 +461,102 @@ ok(!(await page.evaluate(() => window.__xss)), 'código no nome do cliente não 
 await shot(page, 'cliente-ficha-dark');
 await closeTop(page);
 
-section('Catálogo: drop e estoque aparecem');
-await page.evaluate(() => {});
+section('Catálogo: app de uma tela');
 const G = await open(db, { device: 'iPhone 13', theme: 'dark' });
 const c = G.page;
 await db.query(`update public.products set collection_id=$1 where slug='bermuda-jeans-cruz'`, [drop.id]);
 await c.goto(`${BASE}/`);
-await c.waitForSelector('.c-hero');
-ok(await c.isVisible('.c-next-drop'), 'home mostra o próximo drop com contagem');
+await c.waitForSelector('.k-top');
+ok(await c.isVisible('.k-drop'), 'mostra o próximo drop com contagem');
 ok((await c.textContent('[data-countdown] [data-d]')).trim() !== '--', 'contagem regressiva roda');
 await shot(c, 'cat-home-mobile-dark', { full: true });
-ok((await c.locator('.c-card').count()) > 0, 'grade de produtos');
-const txt = await c.evaluate(() => document.body.innerText + JSON.stringify(Object.keys(localStorage)));
+ok((await c.locator('.k-hl').count()) >= 3, 'com poucas peças, todas grandes logo de cara');
+ok((await c.locator('.k-card').count()) === 0, 'e sem repetir a mesma peça nas prateleiras');
+ok(await c.isVisible('.k-sticky [data-q]'), 'busca sempre à mão');
+const txt = await c.evaluate(() => document.body.innerText);
 ok(!/avg_cost|last_cost|on_hand/.test(txt), 'nada interno na página');
-
-await c.goto(`${BASE}/#/loja`);
-await c.waitForSelector('.c-list-main .c-card');
-const before = await c.locator('.c-list-main .c-card').count();
-ok(before >= 3, `listagem com ${before} peças (drop fechado fora)`);
-await c.click('[data-open-filters]');
-await c.waitForSelector('dialog.c-dialog .c-filters');
-await shot(c, 'cat-filtros-mobile');
-await c.click('dialog.c-dialog [data-fsize="P"]');
-await c.click('dialog.c-dialog footer [data-x]');
+await c.click('.k-chip:has-text("Moletons")');
 await c.waitForTimeout(80);
-ok((await c.locator('.c-list-main .c-card').count()) >= 1, 'filtro por tamanho funciona');
-await c.goto(`${BASE}/#/busca/moleton`);
-await c.waitForSelector('.c-list-main');
-await c.waitForTimeout(100);
-ok((await c.locator('.c-list-main .c-card').count()) === 1, 'busca tolera erro de digitação (moleton → Moletom)');
+ok((await c.locator('.k-card').count()) === 1, 'categoria filtra na mesma tela');
+await c.click('[data-filters]');
+await c.waitForSelector('dialog.k-dialog .k-fpanel');
+await shot(c, 'cat-filtros-mobile');
+await c.click('dialog.k-dialog [data-fsize="P"]');
+ok(/\d/.test(await c.textContent('[data-see]')), 'filtro já conta as peças');
+await c.click('dialog.k-dialog [data-see]');
+await c.waitForTimeout(80);
+ok((await c.locator('.k-card').count()) >= 1, 'filtro por tamanho funciona');
+await c.click('[data-filters]');
+await c.click('[data-clear-panel]');
+await c.click('.k-chip:has-text("Tudo")');
+await c.fill('[data-q]', 'moleton');
+await c.waitForTimeout(280);
+ok((await c.locator('.k-card').count()) === 1, 'busca tolera erro de digitação (moleton → Moletom)');
 
 section('Ficha e sacola');
-await c.goto(`${BASE}/#/p/${mol.slug}`);
-await c.waitForSelector('[data-sizes] .c-size');
-await db.query(`select 1`);
-await shot(c, 'cat-ficha-mobile-dark', { full: true });
+await c.click(`.k-card [data-quick="${mol.slug}"]`);
+await c.waitForSelector('.k-pdp [data-sizes] .k-size');
+await shot(c, 'cat-ficha-mobile-dark');
+const fold = await c.evaluate(() => { const r = document.querySelector('[data-sizes]').getBoundingClientRect(); const f = document.querySelector('.k-pdp-foot').getBoundingClientRect(); return r.top < f.top; });
+ok(fold, 'tamanhos à vista sem precisar rolar');
 await c.click('[data-add]');
-await c.waitForSelector('.c-toast:has-text("Escolha o tamanho")');
+await c.waitForSelector('dialog .k-toast:has-text("Escolha o tamanho")');
 ok(true, 'sem tamanho não coloca na sacola');
-await c.click('[data-sizes] .c-size:not(.off)');
-ok(await c.isEnabled('[data-add]'), 'tamanho escolhido libera o botão');
+await c.click('[data-sizes] .k-size:not(.off)');
 await c.click('[data-add]');
-await c.waitForSelector('dialog.c-dialog .c-line');
-await shot(c, 'cat-sacola-mobile');
-await c.fill('dialog.c-dialog [name=code]', 'ROTA10');
-await c.click('dialog.c-dialog [data-coupon] button');
-await c.waitForSelector('dialog.c-dialog .c-row:has-text("Cupom")');
+await c.waitForSelector('.k-pdp', { state: 'detached' });
+ok(await c.isVisible('[data-bag-bar]'), 'sacola fixa aparece embaixo');
+ok((await c.textContent(`[data-quick="${mol.slug}"]`)).trim() === '1', 'o cartão mostra quantas estão na sacola');
+await shot(c, 'cat-home-sacola-mobile');
+await c.click('[data-bag-bar]');
+await c.waitForSelector('dialog.k-dialog .k-line');
+await c.fill('dialog.k-dialog [name=code]', 'ROTA10');
+await c.click('dialog.k-dialog [data-coupon] button');
+await c.waitForSelector('dialog.k-dialog .k-row:has-text("Cupom")');
 ok(true, 'cupom aplicado na sacola');
-await c.click('[data-next]');
-await c.waitForSelector('[data-send]');
+await shot(c, 'cat-sacola-mobile');
 await c.fill('[data-send] [name=name]', 'Sabota Teste');
 await c.fill('[data-send] [name=phone]', '44977776666');
-const [wa] = await Promise.all([c.context().waitForEvent('page'), c.click('[form=c-send]')]);
-await c.waitForSelector('.c-sheet h2:has-text("Pedido enviado")');
+const [wa] = await Promise.all([c.context().waitForEvent('page'), c.click('[form=k-send]')]);
+await c.waitForSelector('.k-sheet-head h2:has-text("Pedido enviado")');
 await wa.waitForLoadState('domcontentloaded').catch(() => {});
 const waUrl = decodeURIComponent(wa.url());
 ok(waUrl.includes('wa.me/5544999990000'), 'abriu o WhatsApp da loja');
 ok(waUrl.includes('Sabota Teste') && waUrl.includes('Moletom Canguru Heavy') && /Total: R\$/.test(waUrl), 'mensagem com nome, peça e total');
 const req = await one(`select * from public.catalog_requests order by number desc limit 1`);
 ok(req.customer_name === 'Sabota Teste' && req.coupon_code === 'ROTA10', 'pedido registrado no sistema');
-ok(n(req.items[0].unit_price) === n(req.items[0].unit_price) && n(req.total) < n(req.items[0].unit_price), 'desconto do cupom aplicado no banco');
+ok(n(req.total) < n(req.items[0].unit_price), 'desconto do cupom aplicado no banco');
 ok((await one(`select reserved from public.product_variants where id=$1`, [req.items[0].variant_id])).reserved === 0, 'pedido público NÃO reserva estoque');
 await wa.close();
 
 section('Avise-me');
-const allOut = molV[3];
 await db.query(`update public.product_variants set on_hand=0 where product_id=$1`, [mol.id]);
 await c.goto(`${BASE}/`);
-await c.goto(`${BASE}/#/p/${mol.slug}`);
 await c.reload();
-await c.waitForSelector('[data-sizes] .c-size.off');
-ok((await c.locator('[data-sizes] .c-size.off').count()) > 0, 'tamanho sem estoque aparece riscado, não some');
-await c.click('[data-sizes] .c-size.off');
-await c.waitForSelector('[data-notify]');
-await c.fill('[data-notify] [name=name]', 'Ana');
-await c.fill('[data-notify] [name=phone]', '44966665555');
-await c.click('[data-notify] button');
+await c.goto(`${BASE}/#p=${mol.slug}`);
+await c.waitForSelector('[data-sizes] .k-size.off');
+ok((await c.locator('[data-sizes] .k-size.off').count()) > 0, 'tamanho sem estoque aparece riscado, não some');
+await c.click('[data-sizes] .k-size.off');
+await c.waitForSelector('[data-avise]');
+await c.fill('[data-avise] [name=name]', 'Ana');
+await c.fill('[data-avise] [name=phone]', '44966665555');
+await c.click('[data-avise] button');
 await c.waitForSelector('[data-notify-box] b:has-text("Fechou")');
 ok((await q(db, `select * from public.stock_alerts`)).length === 1, 'avise-me registrado');
 await db.query(`update public.product_variants set on_hand=4 where product_id=$1`, [mol.id]);
 
-section('Páginas da loja');
-for (const p of ['sobre', 'trocas', 'frete', 'contato', 'privacidade', 'drops', `drop/${drop.slug}`, 'nao-existe']) {
-  await c.goto(`${BASE}/#/${p}`);
-  await c.waitForTimeout(80);
-  ok((await c.locator('#c-view h1, #c-view h2').count()) > 0, `/${p} abre`);
-}
-await shot(c, 'cat-404-mobile');
+section('Links diretos');
+await c.goto(`${BASE}/#i=trocas`);
+await c.reload();
+await c.waitForSelector('.k-sheet-head h2:has-text("Trocas")');
+ok(true, 'link de trocas abre a janela');
+await c.goto(`${BASE}/#d=${drop.slug}`);
+await c.reload();
+await c.waitForSelector('.k-drop-head h2');
+ok((await c.locator('.k-card .k-soon').count()) === 1, 'drop mostra a peça como em breve');
+await c.goto(`${BASE}/#p=nao-existe`);
+await c.waitForSelector('.k-toast:has-text("saiu do catálogo")');
+ok(true, 'link de peça que saiu avisa, sem quebrar');
 ok(G.errors.length === 0, 'catálogo sem erros de JS', G.errors.join(' | '));
 ok(G.external.size === 0, 'catálogo só fala com o próprio site, Supabase e jsDelivr', [...G.external].join(','));
 await G.browser.close();
@@ -548,11 +587,11 @@ await nav(page, 'catalogo');
 await page.waitForSelector('[data-qr] svg', { timeout: 15000 });
 ok(true, 'QR code gerado');
 await shot(page, 'catalogo-admin-dark');
-await page.fill('[data-f] [name=hero_title]', 'Direto das ruas');
+await page.fill('[data-f] [name=tagline]', 'Direto das ruas');
 await page.fill('[data-f] [name=announcement]', 'Frete grátis acima de R$ 299');
 await page.click('[data-save]');
 await toastWith(page, 'Catálogo salvo');
-ok((await one(`select hero_title from public.store_settings`)).hero_title === 'Direto das ruas', 'textos do catálogo salvos');
+ok((await one(`select tagline from public.store_settings`)).tagline === 'Direto das ruas', 'textos do catálogo salvos');
 
 section('Auditoria');
 await nav(page, 'ajustes');
@@ -654,7 +693,7 @@ const SIZES = [
   ['Desktop', { viewport: { width: 1920, height: 1080 } }, false],
 ];
 const ROUTES = ['painel', 'pdv', 'vendas', 'pedidos', 'trocas', 'caixa', 'clientes', 'produtos', 'cadastros', 'promocoes', 'estoque', 'compras', 'fornecedores', 'etiquetas', 'financeiro', 'relatorios', 'catalogo', 'ajustes'];
-const CATALOG = ['', 'loja', `p/${mol.slug}`, 'drops', 'contato'];
+const CATALOG = ['', 'c=camisetas', `p=${mol.slug}`, 'i=trocas'];
 let problems = [];
 for (const [name, device, mobile] of SIZES) {
   for (const theme of ['light', 'dark']) {
@@ -668,13 +707,14 @@ for (const [name, device, mobile] of SIZES) {
       if (name === 'Desktop' && theme === 'dark' && r === 'painel') await shot(X.page, 'tela-Desktop-painel-dark');
     }
     for (const r of CATALOG) {
-      await X.page.goto(`${BASE}/#/${r}`);
-      await X.page.waitForSelector('.c-head');
+      await X.page.goto(`${BASE}/#${r}`);
+      await X.page.waitForSelector('.k-top');
+      if (r.startsWith('p=')) await X.page.waitForSelector('.k-pdp [data-sizes] .k-size');
+      if (r.startsWith('i=')) await X.page.waitForSelector('.k-sheet-head');
       await X.page.waitForTimeout(90);
       problems.push(...(await audit(X.page, `${name}/${theme}/catalogo:${r}`, { mobile })));
       if (['iPhone13', 'Notebook', 'Desktop'].includes(name) && r === '') await shot(X.page, `cat-${name}-home-${theme}`);
-      if (name === 'Notebook' && r === 'loja') await shot(X.page, `cat-Notebook-loja-${theme}`);
-      if (name === 'Notebook' && r.startsWith('p/')) await shot(X.page, `cat-Notebook-ficha-${theme}`);
+            if (name === 'Notebook' && r.startsWith('p=')) await shot(X.page, `cat-Notebook-ficha-${theme}`);
     }
     if (X.errors.length) problems.push(`${name}/${theme}: ${X.errors.slice(0, 3).join(' | ')}`);
     await X.browser.close();

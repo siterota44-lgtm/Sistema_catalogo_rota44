@@ -306,6 +306,7 @@ table.data tbody tr[data-open] { cursor: pointer; }
 .gallery-move button { width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: var(--r-xs); background: rgba(0, 0, 0, .66); color: #fff; cursor: pointer; }
 .gallery-move .icon { width: 13px; height: 13px; }
 .gallery-add { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 1.5px dashed var(--border-strong); border-radius: var(--r-sm); color: var(--text-2); font-size: var(--fs-sm); cursor: pointer; text-align: center; padding: 6px; }
+[data-gallery].is-over .gallery { outline: 2px dashed var(--accent); outline-offset: 4px; }
 .gallery-add:hover { border-color: var(--accent); color: var(--accent-text); }
 .gallery-item .select { padding: 4px 22px 4px 6px; font-size: var(--fs-xs); min-height: 30px; }
 
@@ -359,6 +360,15 @@ table.data tbody tr[data-open] { cursor: pointer; }
 .tree-indent-1 { padding-left: 18px; }
 .tree-indent-2 { padding-left: 36px; }
 .tree-indent-3 { padding-left: 54px; }
+.quick-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: var(--sp-2); }
+.quick { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 76px; padding: 10px 6px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font-family: var(--font-cond); font-weight: 700; font-size: var(--fs-base); letter-spacing: .04em; text-transform: uppercase; cursor: pointer; text-align: center; }
+.quick .icon { width: 24px; height: 24px; color: var(--accent-text); }
+.quick:hover { border-color: var(--accent); }
+.step-mark { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border: 2px solid var(--border-strong); border-radius: 50%; }
+.alert-row .step-mark .icon { width: 14px; height: 14px; color: #fff; }
+.step-row.is-ok { opacity: .55; cursor: default; }
+.step-row.is-ok:hover { background: none; }
+.step-row.is-ok .step-mark { background: var(--success); border-color: var(--success); }
 .alert-list { display: flex; flex-direction: column; }
 .alert-row { display: flex; align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--divider); color: inherit; width: 100%; background: none; border-left: 0; border-right: 0; border-top: 0; text-align: left; cursor: pointer; font: inherit; }
 .alert-row:last-child { border-bottom: 0; }

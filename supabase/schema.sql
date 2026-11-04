@@ -19,7 +19,7 @@
 --      nunca lê tabela, nunca vê custo nem saldo exato;
 --    - quem não está em store_members não enxerga nenhuma linha.
 --
---  Versão do banco: 1 (whoami().schema_version). Subiu? Suba junto o
+--  Versão do banco: 2 (whoami().schema_version). Subiu? Suba junto o
 --  APP.schemaVersion em assets/js/config.js.
 -- =====================================================================
 
@@ -1821,6 +1821,14 @@ begin
     v_seller := auth.uid();   -- vendedor só lança em nome dele
   end if;
 
+  -- venda com telefone e sem cadastro: acha o cliente, ou cria. O CRM enche sem ninguém digitar de novo
+  if v_customer is null and length(v_cphone) >= 10 then
+    select id into v_customer from public.customers where phone = v_cphone and deleted_at is null order by created_at limit 1;
+    if v_customer is null and length(v_cname) > 0 then
+      insert into public.customers (name, phone) values (v_cname, v_cphone) returning id into v_customer;
+    end if;
+  end if;
+
   if v_customer is not null then
     select name, phone into c from public.customers where id = v_customer and deleted_at is null;
     if not found then
@@ -2042,6 +2050,9 @@ begin
   if v.status = 'cancelado' then
     raise exception 'Esta venda está cancelada.';
   end if;
+  if exists (select 1 from public.bills b where b.sale_id = v_id and b.kind = 'receber' and b.status = 'aberta') then
+    raise exception 'Esta venda está no crediário: dê baixa nas parcelas em Financeiro → A receber.';
+  end if;
   if coalesce(nullif(p ->> 'amount', '')::numeric, 0) > v.balance + 0.005
      and not exists (select 1 from public.sale_payments where id = nullif(p ->> 'id', '')::uuid) then
     raise exception 'O valor passa do que falta receber (R$ %).', replace(to_char(v.balance, 'FM999990.00'), '.', ',');
@@ -2133,6 +2144,9 @@ begin
   end if;
   if length(v_why) = 0 then
     raise exception 'Informe o motivo do cancelamento.';
+  end if;
+  if v.returned_total > 0 then
+    raise exception 'Esta venda já teve troca ou devolução: não dá para cancelar. Devolva só as peças que faltam.';
   end if;
   perform public._sale_stock(v_id, 'none', 'Cancelamento da venda #' || v.number || ': ' || v_why);
   if coalesce((p ->> 'refund')::boolean, false) then
@@ -2233,6 +2247,9 @@ begin
   end if;
   if v_kind = 'devolucao' and v_method is null then
     raise exception 'Escolha como o dinheiro volta para o cliente.';
+  end if;
+  if v_kind = 'devolucao' and exists (select 1 from public.bills b where b.sale_id = v.id and b.kind = 'receber' and b.status = 'aberta') then
+    raise exception 'Esta venda tem parcelas em aberto: cancele ou dê baixa em Financeiro → A receber antes de devolver o dinheiro.';
   end if;
 
   -- o desconto da venda (cupom, Pix, manual) já foi rateado no valor que volta
@@ -2710,6 +2727,83 @@ begin
 end;
 $$;
 
+/* Pedido parcial cujo resto nunca vai chegar: encerra com o que veio. */
+create or replace function public.close_purchase(p_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public.require_role('admin', 'gerente');
+  update public.purchases set status = 'recebido', notes = left(concat_ws(' · ', nullif(notes, ''), 'Encerrado sem o restante'), 800)
+   where id = p_id and status = 'parcial';
+  if not found then
+    raise exception 'Só dá para encerrar pedido recebido em parte.';
+  end if;
+end;
+$$;
+
+/*
+ * Chegou peça e não tem pedido de compra: soma ao estoque em uma tela.
+ *   p = { reason?, items: [{ variant_id, qty, unit_cost? }] }
+ * Custo médio atualizado, como numa compra.
+ */
+create or replace function public.quick_stock_entry(p jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  it     jsonb;
+  v_qty  int;
+  v_cost numeric;
+  v_ids  uuid[];
+  n      int := 0;
+  total  int := 0;
+  v_why  text := left(coalesce(nullif(btrim(p ->> 'reason'), ''), 'Entrada rápida'), 300);
+begin
+  perform public.require_role('admin', 'gerente', 'estoquista');
+  select array_agg(distinct (x ->> 'variant_id')::uuid) into v_ids from jsonb_array_elements(coalesce(p -> 'items', '[]'::jsonb)) x;
+  perform 1 from public.product_variants where id = any (v_ids) order by id for update;
+  for it in select * from jsonb_array_elements(coalesce(p -> 'items', '[]'::jsonb)) loop
+    v_qty := coalesce(nullif(it ->> 'qty', '')::int, 0);
+    continue when v_qty <= 0;
+    v_cost := nullif(it ->> 'unit_cost', '')::numeric;
+    if v_cost is not null then
+      perform public._cost_entry((it ->> 'variant_id')::uuid, v_qty, v_cost);
+    end if;
+    perform public._stock_move((it ->> 'variant_id')::uuid, 'entrada_compra', v_qty, 0, v_cost, v_why, 'entrada', null);
+    n := n + 1;
+    total := total + v_qty;
+  end loop;
+  if n = 0 then
+    raise exception 'Digite a quantidade em ao menos um tamanho.';
+  end if;
+  return jsonb_build_object('lines', n, 'pieces', total);
+end;
+$$;
+
+/*
+ * LGPD: apaga os dados pessoais do cadastro E da cópia guardada nas vendas.
+ * As vendas continuam nos relatórios, sem identificação.
+ */
+create or replace function public.anonymize_customer(p_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public.require_role('admin', 'gerente');
+  update public.customers set name = 'Cliente removido', phone = '', cpf = '', email = '', instagram = '', birthday = null, cep = '', address = '', city = '',
+    size_top = '', size_bottom = '', size_shoes = '', notes = '', marketing_consent = false, deleted_at = now()
+   where id = p_id;
+  update public.sales set customer_name = 'Cliente removido', customer_phone = '', address = '' where customer_id = p_id;
+end;
+$$;
+
 -- =====================================================================
 --  EQUIPE: funções
 -- =====================================================================
@@ -2821,7 +2915,7 @@ as $$
     'discount_limit', public._my_discount_limit(),
     'has_pin', exists (select 1 from public.member_secrets where user_id = auth.uid()),
     -- O app confere: banco mais antigo que o app = tela "rode o schema.sql".
-    'schema_version', 1
+    'schema_version', 2
   );
 $$;
 
@@ -2928,7 +3022,7 @@ begin
         left join public.collections col on col.id = pr.collection_id
         where pr.status = 'ativo' and pr.catalog_visible and pr.deleted_at is null
           and (pr.category_id is null or (cat.visible and cat.active))
-          and (pr.collection_id is null or (col.visible and col.active))
+          and (pr.collection_id is null or (col.visible and col.active and (col.ends_at is null or col.ends_at > v_now)))
           and (s.sold_out_behavior = 'mostrar' or col.launch_at > v_now
                or exists (select 1 from public.product_variants x where x.product_id = pr.id and x.active and x.on_hand - x.reserved > 0))
       ) t), '[]'::jsonb)
@@ -2981,7 +3075,7 @@ begin
 
   for it in select * from jsonb_array_elements(p -> 'items') loop
     v_qty := least(greatest(coalesce(nullif(it ->> 'qty', '')::int, 1), 1), 20);
-    select x.id, x.on_hand - x.reserved as avail, pr.name, c.name as cname, z.label as slabel, col.limit_per_customer as climit, col.launch_at as launch
+    select x.id, x.on_hand - x.reserved as avail, pr.name, c.name as cname, z.label as slabel, col.limit_per_customer as climit, col.launch_at as launch, col.ends_at as ends
       into r
       from public.product_variants x
       join public.products pr on pr.id = x.product_id
@@ -2994,6 +3088,7 @@ begin
        and (pr.category_id is null or (cat.visible and cat.active));
     continue when not found;
     continue when r.launch is not null and r.launch > now();
+    continue when r.ends is not null and r.ends <= now();
     if r.climit is not null then
       v_qty := least(v_qty, r.climit);
     end if;
@@ -3317,6 +3412,9 @@ grant execute on function public.close_cash(jsonb) to authenticated;
 grant execute on function public.save_purchase(jsonb) to authenticated;
 grant execute on function public.receive_purchase(jsonb) to authenticated;
 grant execute on function public.cancel_purchase(uuid) to authenticated;
+grant execute on function public.close_purchase(uuid) to authenticated;
+grant execute on function public.quick_stock_entry(jsonb) to authenticated;
+grant execute on function public.anonymize_customer(uuid) to authenticated;
 grant execute on function public.pay_bill(jsonb) to authenticated;
 grant execute on function public.start_inventory(jsonb) to authenticated;
 grant execute on function public.save_inventory_counts(jsonb) to authenticated;

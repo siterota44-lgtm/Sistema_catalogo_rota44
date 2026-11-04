@@ -29,10 +29,10 @@ export const APP = {
   /** Bucket do Supabase Storage para as fotos (criado pelo schema.sql). */
   photoBucket: 'produtos',
   /** Versão do app (aparece em Ajustes e nos erros do Diagnóstico). */
-  version: '1.0.0',
+  version: '1.1.0',
   /**
    * Versão do banco que este app precisa (whoami().schema_version). Banco
    * mais antigo = tela "rode o supabase/schema.sql" em vez de erro escondido.
    */
-  schemaVersion: 1,
+  schemaVersion: 2,
 };

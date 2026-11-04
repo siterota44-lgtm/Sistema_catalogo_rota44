@@ -97,13 +97,13 @@ const res = await p.evaluate(async ({ faces }) => {
     const FACES = ['Sedgwick Ave Display', 'Permanent Marker', 'Rubik Wet Paint', 'Sedgwick Ave Display', 'Rubik Spray Paint'];
 
     // camada de trás: tags grandes e apagadas
-    for (let n = 0; n < 11; n++) {
+    for (let n = 0; n < 5; n++) {
       const x = rr(0, S); const y = rr(0, S); const rot = rr(-0.35, 0.25); const sz = rr(120, 230);
       const t = pick(TAGS); const f = pick(['Sedgwick Ave Display', 'Permanent Marker']);
       wrap(x, y, () => { g.rotate(rot); g.font = `${sz}px "${f}"`; g.fillStyle = ghost; g.textAlign = 'center'; g.fillText(t, 0, 0); });
     }
     // pinceladas secas vermelhas com coroa ou X por cima (nada de bola chapada)
-    for (let n = 0; n < 5; n++) {
+    for (let n = 0; n < 2; n++) {
       const x = rr(0, S); const y = rr(0, S); const rot = rr(-0.5, 0.3); const l = rr(240, 460); const w = rr(46, 92);
       const streaks = Array.from({ length: Math.round(w / 2.6) }, (_, i) => [
         -w / 2 + i * 2.6 + rr(-0.8, 0.8), -l / 2 + rr(0, l * 0.1), l / 2 - rr(0, l * 0.12), rr(2.2, 3.8), R() < 0.12 ? rr(0.2, 0.7) * l - l / 2 : null,
@@ -123,7 +123,7 @@ const res = await p.evaluate(async ({ faces }) => {
       });
     }
     // névoa de spray: pontinhos densos no meio, soltos na borda
-    for (let n = 0; n < 7; n++) {
+    for (let n = 0; n < 2; n++) {
       const x = rr(0, S); const y = rr(0, S); const r = rr(70, 130);
       const ds = Array.from({ length: 520 }, () => {
         const a = R() * 6.283; const d = (R() + R() + R()) / 3 * r * 1.5;
@@ -133,7 +133,7 @@ const res = await p.evaluate(async ({ faces }) => {
       wrap(x, y, () => drawDots(ds, col));
     }
     // throw-ups: letra gorda com contorno (bubble)
-    for (let n = 0; n < 6; n++) {
+    for (let n = 0; n < 3; n++) {
       const x = rr(0, S); const y = rr(0, S); const rot = rr(-0.18, 0.12); const sz = rr(95, 170);
       const t = pick(['44', 'R44', 'ROTA', 'RUA', 'RAP', 'NA RUA']); const tone = pick([ink, red]);
       const dr = dripList(sz * 1.5, 4, sz * 0.02);
@@ -148,13 +148,13 @@ const res = await p.evaluate(async ({ faces }) => {
       });
     }
     // tags por cima, em grade embaralhada: cobre o azulejo sem amontoar
-    const grid = 5; const cell = S / grid;
+    const grid = 4; const cell = S / grid;
     const slots = [];
     for (let i = 0; i < grid; i++) for (let j = 0; j < grid; j++) slots.push([i, j]);
     slots.sort(() => R() - 0.5);
     for (const [i, j] of slots) {
       const x = (i + rr(0.1, 0.9)) * cell; const y = (j + rr(0.2, 0.95)) * cell; const kind = R();
-      const col = R() < 0.24 ? red : pick([ink, ink, ink2]);
+      const col = R() < 0.1 ? red : pick([ink, ink2, ink2]);
       if (kind < 0.62) {
         const t = pick(TAGS); const f = pick(FACES); const rot = rr(-0.3, 0.2); const sz = rr(36, 88);
         const dr = R() < 0.65 ? dripList(sz * Math.min(t.length, 6) * 0.42, 3, 2.2) : [];
@@ -174,16 +174,16 @@ const res = await p.evaluate(async ({ faces }) => {
       }
     }
     // respingos soltos
-    for (let n = 0; n < 24; n++) {
-      const x = rr(0, S); const y = rr(0, S); const ds = dots(rr(30, 90), 26); const col = R() < 0.3 ? red : ink2;
+    for (let n = 0; n < 8; n++) {
+      const x = rr(0, S); const y = rr(0, S); const ds = dots(rr(30, 90), 18); const col = R() < 0.3 ? red : ink2;
       wrap(x, y, () => drawDots(ds, col));
     }
-    return c.toDataURL('image/webp', 0.55).split(',')[1];
+    return c.toDataURL('image/webp', 0.5).split(',')[1];
   }
 
   return {
-    escuro: make({ ink: '#ffffff', ink2: '#b9bcc4', red: '#ff1414', ghost: 'rgba(255,255,255,.2)' }, 4404),
-    claro: make({ ink: '#141414', ink2: '#3c3f47', red: '#e00000', ghost: 'rgba(20,20,20,.15)' }, 4404),
+    escuro: make({ ink: '#e4e4e6', ink2: '#9a9ca2', red: '#9c1b1b', ghost: 'rgba(255,255,255,.12)' }, 4404),
+    claro: make({ ink: '#1c1c1c', ink2: '#4a4c52', red: '#8f1f1f', ghost: 'rgba(20,20,20,.1)' }, 4404),
   };
 }, { faces });
 

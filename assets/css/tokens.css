@@ -10,10 +10,10 @@
   color-scheme: light;
 
   /* --- superfícies --- */
-  --bg:            #eeece7;
+  --bg:            #e6e3dd;
   --bg-elevated:   #ffffff;
   --surface:       #ffffff;
-  --surface-2:     #f4f2ee;
+  --surface-2:     #f2f0eb;
   --surface-3:     #e6e3dd;
   --surface-hover: #f1efea;
   --overlay:       rgba(0, 0, 0, .46);
@@ -113,8 +113,8 @@
 
   /* --- o muro: arte de grafite (original) atrás de tudo --- */
   --graffiti: url('../brand/grafite-claro.webp');
-  --graffiti-opacity: .13;
-  --graffiti-strong: .55;
+  --graffiti-opacity: .07;
+  --graffiti-strong: .14;
 }
 
 /* --------------------------------------------------------------- escuro */
@@ -122,7 +122,7 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --bg:            #0b0b0c;
+  --bg:            #070708;
   --bg-elevated:   #161617;
   --surface:       #161617;
   --surface-2:     #1e1e20;
@@ -176,8 +176,8 @@
   --shadow-lg: 0 20px 56px rgba(0, 0, 0, .75);
 
   --graffiti: url('../brand/grafite-escuro.webp');
-  --graffiti-opacity: .12;
-  --graffiti-strong: .5;
+  --graffiti-opacity: .075;
+  --graffiti-strong: .16;
 }
 
 /* Quem nunca escolheu tema segue o sistema (mesmos valores do bloco acima). */
@@ -185,7 +185,7 @@
   :root:not([data-theme='light']) {
     color-scheme: dark;
 
-    --bg:            #0b0b0c;
+    --bg:            #070708;
     --bg-elevated:   #161617;
     --surface:       #161617;
     --surface-2:     #1e1e20;
@@ -238,8 +238,8 @@
     --shadow-lg: 0 20px 56px rgba(0, 0, 0, .75);
 
     --graffiti: url('../brand/grafite-escuro.webp');
-    --graffiti-opacity: .12;
-    --graffiti-strong: .5;
+    --graffiti-opacity: .075;
+    --graffiti-strong: .16;
   }
 }
 

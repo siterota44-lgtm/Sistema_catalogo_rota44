@@ -13,6 +13,15 @@ import { round2 } from '../core/calc.js';
 
 export const statusBadge = (s) => badge(SALE_STATUS[s]?.label || s, SALE_STATUS[s]?.tone);
 
+/** O que falta fazer nesta venda: o botão da lista anda com ela sem abrir a ficha. */
+function nextStep(s) {
+  if (s.status === 'aguardando_pagamento') return { label: 'Receber', pay: true };
+  if (s.status === 'pago') return { label: 'Separar', to: 'em_separacao' };
+  if (s.status === 'em_separacao') return ['retirada', 'balcao'].includes(s.delivery_method) ? { label: 'Pronto p/ retirar', to: 'pronto_retirada' } : { label: 'Enviar', track: true };
+  if (s.status === 'enviado' || s.status === 'pronto_retirada') return { label: 'Entregue', to: 'entregue' };
+  return null;
+}
+
 const PERIODS = { hoje: 'Hoje', '7d': '7 dias', mes: 'Este mês', '30d': '30 dias', tudo: 'Tudo carregado' };
 
 function periodRange(p) {
@@ -79,6 +88,7 @@ export function mount(host, ctx) {
       { label: 'Situação', cell: (s) => statusBadge(s.status) },
       { label: 'Total', right: true, cell: (s) => moneyHTML(s.total, s.status === 'cancelado' ? 'dim' : 'strong') },
       { label: 'Falta', right: true, cell: (s) => (Number(s.balance) > 0.005 && s.status !== 'cancelado' ? moneyHTML(s.balance, 'tone-danger') : '<span class="dim">-</span>') },
+      { label: '', cell: (s) => { const n = nextStep(s); return n ? `<div class="row-actions"><button class="btn btn-sm" data-next="${esc(s.id)}">${esc(n.label)} ${icon('chevronRight')}</button></div>` : ''; } },
     ], shown, {
       rowAttr: (s) => `data-open="${esc(s.id)}"`,
       empty: 'Nenhuma venda nesse filtro.',
@@ -104,6 +114,15 @@ export function mount(host, ctx) {
         telefone: s.customer_phone, vendedor: Data.memberName(s.seller_id), produtos: Number(s.items_total), descontos: Number(s.items_discount) + Number(s.discount_value) + Number(s.coupon_discount) + Number(s.pix_discount),
         frete: Number(s.shipping_fee), total: Number(s.total), pago: Number(s.paid_total), devolvido: Number(s.returned_total),
       })));
+      return;
+    }
+    const nx = e.target.closest('[data-next]');
+    if (nx) {
+      const s = Data.sale(nx.dataset.next);
+      const n = nextStep(s);
+      if (n.pay) openPayment(s.id, () => {});
+      else if (n.track) openTracking(s.id, () => {});
+      else Data.setSaleStatus({ sale_id: s.id, status: n.to }).then(() => toast(SALE_STATUS[n.to].label)).catch((err) => toastError('Não deu para mudar', friendlyError(err)));
       return;
     }
     const row = e.target.closest('[data-open]');

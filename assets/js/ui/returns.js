@@ -1,7 +1,7 @@
 /** Trocas, devoluções e vale-troca. Tamanho errado é o motivo nº 1 em loja de roupa. */
 
 import * as Data from '../core/data.js';
-import { esc, money, formatDate, relativeDate, todayISO } from '../core/utils.js';
+import { esc, money, formatDate, relativeDate, todayISO, daysSince } from '../core/utils.js';
 import { RETURN_REASONS, PAYMENT_METHODS } from '../core/constants.js';
 import { friendlyError } from '../core/errors.js';
 import { icon } from './icons.js';
@@ -92,6 +92,7 @@ export function openReturnForm(saleId, done) {
     size: 'lg',
     body: `
       <div class="col gap-4">
+        ${Number(Data.settings().exchange_days) > 0 && daysSince(s.sale_date) > Number(Data.settings().exchange_days) ? `<div class="alert" data-kind="warn">${icon('alert')}<div>Compra feita há ${daysSince(s.sale_date)} dias: fora do prazo de troca da loja (${esc(Data.settings().exchange_days)} dias). Dá para seguir, se você quiser abrir exceção.</div></div>` : ''}
         <div class="segmented" data-kind role="group" aria-label="Tipo">
           <button type="button" data-k="troca" aria-pressed="true">Troca (gera vale)</button>
           <button type="button" data-k="devolucao" aria-pressed="false">Devolução (volta o dinheiro)</button>

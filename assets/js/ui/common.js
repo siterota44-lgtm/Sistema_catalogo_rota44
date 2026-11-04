@@ -159,7 +159,7 @@ export function mountGallery(box, { images = [], colors = () => [], onChange } =
           <input type="file" accept="image/*" multiple data-file hidden>
         </label>
       </div>
-      ${TOUCH.matches ? '' : '<span class="xs dim">Pode selecionar várias de uma vez. A primeira é a capa no catálogo.</span>'}`;
+      ${TOUCH.matches ? '' : '<span class="xs dim">Selecione várias de uma vez, arraste para cá ou cole com Ctrl+V. A primeira é a capa.</span>'}`;
   };
 
   const emit = () => onChange?.(list);
@@ -196,6 +196,21 @@ export function mountGallery(box, { images = [], colors = () => [], onChange } =
     if (e.target.closest('[data-left]')) { [list[i - 1], list[i]] = [list[i], list[i - 1]]; emit(); render(); return; }
     if (e.target.closest('[data-right]')) { [list[i + 1], list[i]] = [list[i], list[i + 1]]; emit(); render(); }
   });
+  // computador: arrastar a foto para o campo ou colar com Ctrl+V
+  box.addEventListener('dragover', (e) => { e.preventDefault(); box.classList.add('is-over'); });
+  box.addEventListener('dragleave', () => box.classList.remove('is-over'));
+  box.addEventListener('drop', (e) => {
+    e.preventDefault();
+    box.classList.remove('is-over');
+    if (e.dataTransfer?.files?.length) take(e.dataTransfer.files);
+  });
+  const onPaste = (e) => {
+    if (!box.isConnected) { document.removeEventListener('paste', onPaste); return; }
+    const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith('image/'));
+    if (files.length) { e.preventDefault(); take(files); }
+  };
+  if (!TOUCH.matches) document.addEventListener('paste', onPaste);
+
   render();
   return { get value() { return list; }, get busy() { return busy > 0; }, refresh: render };
 }

@@ -602,6 +602,16 @@ export async function receivePurchase(p) {
   return r;
 }
 export async function cancelPurchase(id) { await rpc('cancel_purchase', { p_id: id }); await reload('purchases'); }
+export async function closePurchase(id) { await rpc('close_purchase', { p_id: id }); await reload('purchases'); }
+export async function quickStockEntry(p) {
+  const r = await rpc('quick_stock_entry', { p });
+  await reload('product_variants', 'variant_costs');
+  return r;
+}
+export async function anonymizeCustomer(id) {
+  await rpc('anonymize_customer', { p_id: id });
+  await reload('customers', 'sales');
+}
 
 /* ----------------------------------------------------------- financeiro -- */
 

@@ -2,7 +2,7 @@
 // Não grava nada: só tenta, e tudo tem de sair "recusado".
 // Rodar depois do schema.sql e a cada mudança de banco:
 //   cd tests && npm run test:security
-//   cd tests && SITE_URL=https://rota-44.netlify.app npm run test:security   (confere também o site publicado)
+//   cd tests && SITE_URL=https://rota44.netlify.app npm run test:security   (confere também o site publicado)
 
 const URL_ = 'https://jjynilzpcekissqkbigj.supabase.co';
 const KEY = 'sb_publishable_VuIb8VQW_25fDUxTk1O81Q_40Cl9ES0';

@@ -349,11 +349,11 @@ export async function audit(page, label, { mobile = false } = {}) {
     const issues = [];
     const vw = document.documentElement.clientWidth;
     if (document.documentElement.scrollWidth > vw + 1) {
-      const off = [...document.querySelectorAll('body *')].filter((el) => el.getBoundingClientRect().right > vw + 1 && !el.closest('.grid-matrix, .c-chips, .tabs, .c-gal-thumbs, .table-wrap, dialog, .segmented')).slice(0, 3).map((el) => `${el.tagName}.${String(el.className).slice(0, 40)}`);
+      const off = [...document.querySelectorAll('body *')].filter((el) => el.getBoundingClientRect().right > vw + 1 && !el.closest('.grid-matrix, .k-chips, .k-hl-row, .tabs, .k-gal-track, .table-wrap, dialog, .segmented')).slice(0, 3).map((el) => `${el.tagName}.${String(el.className).slice(0, 40)}`);
       issues.push(`${label}: rolagem lateral (${document.documentElement.scrollWidth} > ${vw}) ${off.join(' | ')}`);
     }
     for (const d of document.querySelectorAll('dialog[open]')) {
-      const p = d.querySelector('.modal-body, .c-sheet-body');
+      const p = d.querySelector('.modal-body, .k-sheet-body');
       if (p && p.scrollWidth > p.clientWidth + 1 && !p.querySelector('.grid-matrix, .label-sheet')) issues.push(`${label}: modal com rolagem lateral (${p.scrollWidth} > ${p.clientWidth})`);
     }
     if (mobile) {
@@ -362,8 +362,8 @@ export async function audit(page, label, { mobile = false } = {}) {
       for (const el of top.querySelectorAll('input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=color]):not([hidden]), select, textarea')) {
         if (visible(el) && parseFloat(getComputedStyle(el).fontSize) < 16) issues.push(`${label}: campo com fonte ${getComputedStyle(el).fontSize} (${el.name || el.placeholder || el.className})`);
       }
-      for (const el of top.querySelectorAll('button, a.btn, a.c-btn, .chip, label.btn')) {
-        if (!visible(el) || el.closest('.gallery-move, .gallery-rm, .cart-qty, .pp-nav, [data-dot]')) continue;
+      for (const el of top.querySelectorAll('button, a.btn, a.k-btn, .chip, label.btn')) {
+        if (!visible(el) || el.closest('.gallery-move, .gallery-rm, .cart-qty, .pp-nav, [data-dot], .k-gal-dots')) continue;
         const r = el.getBoundingClientRect();
         if (r.height < 36 || r.width < 36) issues.push(`${label}: toque pequeno ${Math.round(r.width)}×${Math.round(r.height)} "${(el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 28)}"`);
       }

@@ -78,7 +78,7 @@ await expectError(() => rpc('member_upsert', { email: 'naoexiste@x.com', nome: '
 await as('authenticated', vendedorId);
 await expectError(() => rpc('member_upsert', { email: 'intruso@rota44.test', nome: 'I', role: 'admin' }), /não tem permissão/, 'vendedor não mexe na equipe');
 let who = await one(`select public.whoami() w`);
-ok(who.w.role === 'vendedor' && who.w.can_see_cost === false && who.w.schema_version === 1, 'whoami do vendedor: sem custo');
+ok(who.w.role === 'vendedor' && who.w.can_see_cost === false && who.w.schema_version === 2, 'whoami do vendedor: sem custo');
 
 section('Anônimo: portas fechadas');
 await as('anon', null);
@@ -357,7 +357,7 @@ await rpc('save_sale', { sale_date: '2026-11-04', customer_id: cli2.id, items: [
 await expectError(() => rpc('save_sale', { sale_date: '2026-11-04', customer_id: cli2.id, items: [{ variant_id: P.id, qty: 1 }], payments: [{ method: 'pix', amount: 100 }] }), /no máximo 2 por cliente/, 'limite por cliente do drop');
 
 await as('anon', null);
-const pedido = await rpc('catalog_request', { customer_name: 'Sabotage Teste', customer_phone: '(44) 99999-0000', items: [{ variant_id: M.id, qty: 1, unit_price: 0.01 }, { variant_id: M.id, qty: 1 }] });
+const pedido = await rpc('catalog_request', { customer_name: 'Sabotage Teste', customer_phone: '(44) 99999-0011', items: [{ variant_id: M.id, qty: 1, unit_price: 0.01 }, { variant_id: M.id, qty: 1 }] });
 ok(n(pedido.total) === 200, 'preço do pedido vem do banco (o navegador mandou 0,01)');
 ok((await one(`select public.public_coupon('NADA', 100) r`)).r.ok === false, 'cupom inválido na sacola responde sem erro');
 ok((await rpc('notify_me', { variant_id: M.id, name: 'Ana', phone: '44999990001' })).ok === true, 'avise-me registrado');
@@ -396,6 +396,42 @@ ok((await all(`select * from public.products`)).length === 0, 'usuário desativa
 ok((await one(`select public.whoami() w`)).w.member === false, 'whoami: não é mais membro');
 await as('authenticated', adminId);
 ok((await all(`select * from public.sales where seller_id=$1`, [vendedorId])).length > 0, 'mas o histórico de vendas dele continua');
+
+section('Regras validadas');
+await as('authenticated', gerenteId);
+await expectError(() => rpc('cancel_sale', { sale_id: tv.id, reason: 'x', refund: true }), /já teve troca/, 'venda com troca não cancela (devolveria duas vezes)');
+await expectError(() => rpc('add_payment', { sale_id: cred.id, method: 'pix', amount: 10 }), /crediário/, 'crediário recebe só pelas parcelas');
+const credIt = await one(`select id from public.sale_items where sale_id=$1`, [cred.id]);
+await expectError(() => rpc('create_return', { sale_id: cred.id, kind: 'devolucao', reason: 'cor', refund_method: 'pix', items: [{ sale_item_id: credIt.id, qty: 1 }] }), /parcelas em aberto/, 'não devolve dinheiro de parcela que nem foi paga');
+const a1 = await rpc('save_sale', { sale_date: '2026-11-04', status: 'aguardando_pagamento', channel: 'site', customer_name: 'Cliente do Site', customer_phone: '(44) 98888-7777', items: [{ variant_id: B.id, qty: 1 }] });
+const a2 = await rpc('save_sale', { sale_date: '2026-11-04', status: 'aguardando_pagamento', channel: 'site', customer_name: 'Outro Nome', customer_phone: '44988887777', items: [{ variant_id: B.id, qty: 1 }] });
+ok((await all(`select id from public.customers where phone='44988887777'`)).length === 1, 'telefone novo vira cliente, e não duplica');
+const s1 = await one(`select customer_id, customer_name from public.sales where id=$1`, [a2.id]);
+ok(s1.customer_id && s1.customer_name === 'Cliente do Site', 'segunda venda reconhece o cliente pelo telefone');
+await db.query(`select public.anonymize_customer($1)`, [s1.customer_id]);
+const s2 = await one(`select customer_name, customer_phone from public.sales where id=$1`, [a1.id]);
+ok(s2.customer_name === 'Cliente removido' && s2.customer_phone === '', 'LGPD: apaga também a cópia nas vendas');
+await rpc('cancel_sale', { sale_id: a1.id, reason: 't' }); await rpc('cancel_sale', { sale_id: a2.id, reason: 't' });
+await as('authenticated', estoqueId);
+const hand0 = (await one(`select on_hand from public.product_variants where id=$1`, [G.id])).on_hand;
+const qe = await rpc('quick_stock_entry', { reason: 'Confecção', items: [{ variant_id: G.id, qty: 3, unit_cost: 50 }, { variant_id: M.id, qty: 0 }] });
+ok(qe.pieces === 3 && (await one(`select on_hand from public.product_variants where id=$1`, [G.id])).on_hand === hand0 + 3, 'entrada rápida soma ao estoque');
+ok((await one(`select type from public.stock_movements where variant_id=$1 order by id desc limit 1`, [G.id])).type === 'entrada_compra', 'e fica no histórico');
+await expectError(() => rpc('quick_stock_entry', { items: [{ variant_id: G.id, qty: 0 }] }), /Digite a quantidade/, 'entrada sem quantidade é recusada');
+const comp2 = await rpc('save_purchase', { status: 'enviado', items: [{ variant_id: G.id, qty_ordered: 4, unit_cost: 50 }] });
+const pi2 = await one(`select id from public.purchase_items where purchase_id=$1`, [comp2.id]);
+await rpc('receive_purchase', { purchase_id: comp2.id, create_bill: false, items: [{ item_id: pi2.id, qty: 1 }] });
+await as('authenticated', gerenteId);
+await db.query(`select public.close_purchase($1)`, [comp2.id]);
+ok((await one(`select status from public.purchases where id=$1`, [comp2.id])).status === 'recebido', 'pedido parcial pode ser encerrado sem o resto');
+await as(null); await db.query(`update public.products set collection_id=$1 where id=$2`, [drop.id, prod.id]);
+await db.query(`update public.collections set ends_at = now() - interval '1 hour' where id=$1`, [drop.id]);
+await db.query(`select set_config('request.headers', '{"x-forwarded-for":"8.8.8.8"}', false)`); await as('authenticated', gerenteId);
+cat = await catFromPublic();
+ok(!cat.products.some((x) => x.id === prod.id), 'drop encerrado sai do catálogo');
+await as('anon', null);
+await expectError(() => rpc('catalog_request', { customer_name: 'Tarde', items: [{ variant_id: P.id, qty: 1 }] }), /não estão mais disponíveis/, 'e não aceita pedido');
+await as(null); await db.query(`update public.collections set ends_at = null where id=$1`, [drop.id]);
 
 section('Excluir produto só esconde');
 await as('authenticated', gerenteId);

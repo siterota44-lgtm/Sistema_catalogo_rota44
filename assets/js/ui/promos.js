@@ -1,16 +1,17 @@
 /** Promoções (preço por categoria, coleção, produto ou loja) e cupons. */
 
 import * as Data from '../core/data.js';
-import { esc, money, parseMoney, formatDate } from '../core/utils.js';
+import { esc, money, parseMoney, formatDate, todayISO } from '../core/utils.js';
 import { friendlyError } from '../core/errors.js';
 import { icon } from './icons.js';
 import { toast, toastError, openModal, withLoading, confirmDialog } from './kit.js';
 import { $, table, head, field, options, optionsMap, readForm, switchField, badge, moneyInput, categoryOptions } from './common.js';
 
 const TARGETS = { tudo: 'Loja toda', categoria: 'Categoria', colecao: 'Drop / coleção', produto: 'Produto' };
-const toDate = (iso) => (iso ? iso.slice(0, 10) : '');
-const dateStart = (d) => (d ? `${d}T00:00:00` : null);
-const dateEnd = (d) => (d ? `${d}T23:59:59` : null);
+// no fuso do aparelho: sem isso a promoção acabava às 21 h do último dia
+const toDate = (iso) => (iso ? todayISO(new Date(iso)) : '');
+const dateStart = (d) => (d ? new Date(`${d}T00:00:00`).toISOString() : null);
+const dateEnd = (d) => (d ? new Date(`${d}T23:59:59`).toISOString() : null);
 
 function windowBadge(x) {
   const now = new Date();

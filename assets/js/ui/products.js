@@ -8,15 +8,15 @@
 import * as Data from '../core/data.js';
 import { esc, money, parseMoney, formatDateTime, todayISO, moneyInputValue } from '../core/utils.js';
 import { GENDERS, FITS, PRINT_TYPES, PRODUCT_STATUS } from '../core/constants.js';
-import { marginPct, suggestedPrice, round2 } from '../core/calc.js';
+import { marginPct, suggestedPrice, round2, fold } from '../core/calc.js';
 import { friendlyError } from '../core/errors.js';
 import { icon } from './icons.js';
 import { toast, toastError, openModal, withLoading, confirmDialog, openMenu } from './kit.js';
 import {
   $, $$, moneyHTML, badge, table, head, field, options, optionsMap, categoryOptions, moneyInput, paged, photo, dot,
-  readForm, checkbox, switchField, mountGallery, exportCSV,
+  readForm, checkbox, switchField, mountGallery, exportCSV, catalogUrl,
 } from './common.js';
-import { openVariantStock, stockGridHTML } from './stock.js';
+import { openVariantStock, stockGridHTML, openStockEntry } from './stock.js';
 import { openLabels } from './labels.js';
 
 export function mount(host) {
@@ -167,7 +167,13 @@ export function openProductView(id) {
         </div>
         <div data-history></div>
       </div>`;
-    $('[data-a]', m.foot).innerHTML = canEdit ? `<button class="btn btn-primary" data-edit>${icon('edit')} Editar</button>` : '';
+    const link = catalogUrl(`p=${p.slug}`);
+    const onCatalog = p.catalog_visible && p.status === 'ativo';
+    $('[data-a]', m.foot).innerHTML = `
+      ${onCatalog ? `<button class="btn" data-copy-link>${icon('link')} Copiar link</button>
+        <a class="btn" href="https://wa.me/?text=${esc(encodeURIComponent(`${p.name}: ${link}`))}" target="_blank" rel="noopener">${icon('whatsapp')} Mandar</a>` : ''}
+      ${Data.canCost() ? `<button class="btn" data-entry>${icon('plus')} Entrada de estoque</button>` : ''}
+      ${canEdit ? `<button class="btn btn-primary" data-edit>${icon('edit')} Editar</button>` : ''}`;
     if (canEdit) {
       try {
         const hist = await Data.priceHistory(id, 10);
@@ -184,6 +190,11 @@ export function openProductView(id) {
   m.panel.addEventListener('click', (e) => {
     const cell = e.target.closest('[data-variant]');
     if (cell) { openVariantStock(cell.dataset.variant, draw); return; }
+    if (e.target.closest('[data-entry]')) { openStockEntry(id, draw); return; }
+    if (e.target.closest('[data-copy-link]')) {
+      navigator.clipboard?.writeText(catalogUrl(`p=${Data.product(id).slug}`)).then(() => toast('Link copiado')).catch(() => toast('Não consegui copiar', { kind: 'warn' }));
+      return;
+    }
     if (e.target.closest('[data-edit]')) openProductForm(Data.product(id), { onSaved: draw });
   });
   draw();
@@ -192,7 +203,7 @@ export function openProductView(id) {
 
 /* ---------------------------------------------------- formulário ------- */
 
-export function openProductForm(prod, { from = null, onSaved } = {}) {
+export function openProductForm(prod, { from = null, onSaved, colors = null } = {}) {
   const editing = !!prod?.id;
   const sourceId = from || prod?.id || null;
   const baseVariants = sourceId ? Data.variantsOf(sourceId) : [];
@@ -209,7 +220,7 @@ export function openProductForm(prod, { from = null, onSaved } = {}) {
       price: v.price, stock_min: v.stock_min,
     });
   }
-  let selectedColors = [...new Set(baseVariants.filter((v) => v.active || editing).map((v) => v.color_id))];
+  let selectedColors = colors ? [...colors] : [...new Set(baseVariants.filter((v) => v.active || editing).map((v) => v.color_id))];
   let gridId = prod?.grid_id || (baseVariants[0] ? Data.size(baseVariants[0].size_id)?.grid_id : '') || '';
   // combinação que foi desmarcada ao cadastrar continua desmarcada ao editar
   for (const c of selectedColors) for (const z of Data.sizesOf(gridId)) {
@@ -227,6 +238,11 @@ export function openProductForm(prod, { from = null, onSaved } = {}) {
     },
     body: `
       <form class="col gap-5" data-f novalidate>
+        <div class="fieldset">
+          <div class="fieldset-title">Fotos</div>
+          <div data-gallery></div>
+        </div>
+
         <div class="fieldset">
           <div class="fieldset-title">O básico</div>
           <div class="form-grid">
@@ -256,20 +272,15 @@ export function openProductForm(prod, { from = null, onSaved } = {}) {
             ${canCost ? field('Custo (para as peças novas)', moneyInput('cost', sourceId && baseVariants[0] ? Data.cost(baseVariants[0].id)?.avg_cost : ''), 4) : ''}
             ${canCost ? `<div class="field span-4"><label class="label">Margem</label><div class="input" style="background:var(--surface-2)" data-margin>-</div></div>` : ''}
             ${field('Preço promocional', moneyInput('promo_price', prod?.promo_price ?? ''), 4)}
-            ${field('Promoção começa', `<input class="input" type="date" name="promo_from" value="${esc(prod?.promo_from?.slice(0, 10))}">`, 4)}
-            ${field('Promoção termina', `<input class="input" type="date" name="promo_to" value="${esc(prod?.promo_to?.slice(0, 10))}">`, 4)}
+            ${field('Promoção começa', `<input class="input" type="date" name="promo_from" value="${prod?.promo_from ? todayISO(new Date(prod.promo_from)) : ''}">`, 4)}
+            ${field('Promoção termina', `<input class="input" type="date" name="promo_to" value="${prod?.promo_to ? todayISO(new Date(prod.promo_to)) : ''}">`, 4)}
           </div>
           ${canCost ? '<button type="button" class="link-btn" data-suggest style="align-self:flex-start"></button>' : ''}
         </div>
 
-        <div class="fieldset">
-          <div class="fieldset-title">Fotos</div>
-          <div data-gallery></div>
-        </div>
-
-        <div class="fieldset">
-          <div class="fieldset-title">Ficha da peça</div>
-          <div class="form-grid">
+        <details class="fieldset"${prod?.fit || prod?.fabric ? ' open' : ''}>
+          <summary>Detalhes da peça: modelagem, tecido, medidas, descrição</summary>
+          <div class="form-grid" style="margin-top:12px">
             ${field('Modelagem', `<input class="input" name="fit" list="fits" value="${esc(prod?.fit)}"><datalist id="fits">${FITS.map((x) => `<option value="${esc(x)}">`).join('')}</datalist>`, 4)}
             ${field('Tecido / composição', `<input class="input" name="fabric" value="${esc(prod?.fabric)}" placeholder="100% algodão">`, 4)}
             ${field('Gramatura (g/m²)', `<input class="input" name="gsm" type="number" inputmode="numeric" value="${esc(prod?.gsm)}">`, 4)}
@@ -280,18 +291,18 @@ export function openProductForm(prod, { from = null, onSaved } = {}) {
             ${field('Descrição completa', `<textarea class="textarea" name="description" rows="3">${esc(prod?.description)}</textarea>`, 12)}
             ${field('Como lavar', `<input class="input" name="wash_care" value="${esc(prod?.wash_care)}">`, 12)}
           </div>
-        </div>
+        </details>
 
-        <div class="fieldset">
-          <div class="fieldset-title">Catálogo</div>
-          <div class="form-grid">
+        <details class="fieldset">
+          <summary>Catálogo: já entra à mostra. Mudar aqui</summary>
+          <div class="form-grid" style="margin-top:12px">
             ${field('Situação', `<select class="select" name="status">${optionsMap(PRODUCT_STATUS, prod?.status || 'ativo')}</select>`, 6)}
             <div class="span-6 col gap-2" style="justify-content:flex-end">
               ${switchField('catalog_visible', 'Mostrar no catálogo', prod ? prod.catalog_visible : true)}
-              ${switchField('featured', 'Destaque na página inicial', prod?.featured)}
+              ${switchField('featured', 'Destaque no topo do catálogo', prod?.featured)}
             </div>
           </div>
-        </div>
+        </details>
 
         <details class="fieldset">
           <summary>Fiscal, frete e SEO</summary>
@@ -311,7 +322,9 @@ export function openProductForm(prod, { from = null, onSaved } = {}) {
           <div data-var-rows style="margin-top:10px"></div>
         </details>
       </form>`,
-    footer: `<button class="btn" data-close>Cancelar</button><button class="btn btn-primary" data-ok>${editing ? 'Salvar' : 'Criar produto'}</button>`,
+    footer: `<button class="btn" data-close>Cancelar</button>
+      ${editing ? '' : '<button class="btn" data-ok-next>Criar e cadastrar outra</button>'}
+      <button class="btn btn-primary" data-ok>${editing ? 'Salvar' : 'Criar produto'}</button>`,
   });
 
   let dirty = false;
@@ -326,7 +339,8 @@ export function openProductForm(prod, { from = null, onSaved } = {}) {
 
   function drawColors() {
     $('[data-colors]', m.panel).innerHTML = Data.colors().filter((c) => c.active).map((c) => `
-      <button type="button" class="chip sm" data-color="${esc(c.id)}" aria-pressed="${selectedColors.includes(c.id)}">${dot(c.hex)} ${esc(c.name)}</button>`).join('');
+      <button type="button" class="chip sm" data-color="${esc(c.id)}" aria-pressed="${selectedColors.includes(c.id)}">${dot(c.hex)} ${esc(c.name)}</button>`).join('')
+      + `<button type="button" class="chip sm chip-add" data-new-color>${icon('plus')} Nova cor</button>`;
   }
 
   function drawMatrix() {
@@ -343,6 +357,10 @@ export function openProductForm(prod, { from = null, onSaved } = {}) {
       if (!combos.has(k)) combos.set(k, { id: null, on: true, initial: 0, on_hand: 0, sku: '', barcode: '', price: null, stock_min: 1 });
     }
     box.innerHTML = `
+      ${canCost && !editing ? `<div class="row gap-2" style="margin-bottom:8px;flex-wrap:wrap">
+        <span class="small muted">Mesma quantidade em tudo:</span>
+        <input class="input" style="width:76px;text-align:center" type="number" inputmode="numeric" min="0" data-fill aria-label="Quantidade para todos">
+        <button type="button" class="btn btn-sm" data-fill-go>Aplicar</button></div>` : ''}
       <div class="grid-matrix"><table>
         <thead><tr><th>${canCost ? 'Estoque inicial' : 'Variações'}</th>${sizes.map((z) => `<th>${esc(z.label)}</th>`).join('')}</tr></thead>
         <tbody>
@@ -450,6 +468,23 @@ export function openProductForm(prod, { from = null, onSaved } = {}) {
       gallery.refresh();
       return;
     }
+    if (e.target.closest('[data-fill-go]')) {
+      const n = Number(m.panel.querySelector('[data-fill]').value) || 0;
+      for (const x of combos.values()) if (x.on && !x.id) x.initial = n;
+      dirty = true;
+      drawMatrix();
+      return;
+    }
+    if (e.target.closest('[data-new-color]')) {
+      openNewColor((c) => {
+        selectedColors = [...selectedColors, c.id];
+        dirty = true;
+        drawColors();
+        drawMatrix();
+        gallery.refresh();
+      });
+      return;
+    }
     const sg = e.target.closest('[data-suggest]');
     if (sg) {
       form.base_price.value = moneyInputValue(Number(sg.dataset.value));
@@ -458,8 +493,7 @@ export function openProductForm(prod, { from = null, onSaved } = {}) {
     }
   });
 
-  const ok = m.foot.querySelector('[data-ok]');
-  ok.addEventListener('click', () => withLoading(ok, async () => {
+  const submit = (btn, again) => withLoading(btn, async () => {
     const v = readForm(form);
     if (!v.name) { toast('Informe o nome do produto', { kind: 'warn' }); form.name.focus(); return; }
     if (gallery.busy) { toast('Espere as fotos terminarem de subir', { kind: 'warn' }); return; }
@@ -475,8 +509,8 @@ export function openProductForm(prod, { from = null, onSaved } = {}) {
       tags: v.tags.split(',').map((x) => x.trim()).filter(Boolean),
       status: v.status, catalog_visible: v.catalog_visible, featured: v.featured,
       base_price: parseMoney(v.base_price), promo_price: parseMoney(v.promo_price) || null,
-      promo_from: v.promo_from ? `${v.promo_from}T00:00:00` : null,
-      promo_to: v.promo_to ? `${v.promo_to}T23:59:59` : null,
+      promo_from: v.promo_from ? new Date(`${v.promo_from}T00:00:00`).toISOString() : null,
+      promo_to: v.promo_to ? new Date(`${v.promo_to}T23:59:59`).toISOString() : null,
       ncm: v.ncm, origin: v.origin, cest: v.cest, weight_g: v.weight_g, dimensions: v.dimensions,
       seo_title: v.seo_title, seo_desc: v.seo_desc,
       images: gallery.value,
@@ -494,14 +528,52 @@ export function openProductForm(prod, { from = null, onSaved } = {}) {
       m.close();
       toast(editing ? 'Produto salvo' : 'Produto criado', { text: `${list.length} variações` });
       onSaved?.();
+      // a próxima peça já vem com categoria, grade e cores da anterior
+      if (again) {
+        openProductForm({
+          category_id: v.category_id, brand_id: v.brand_id, collection_id: v.collection_id, gender: v.gender, grid_id: gridId, size_chart_id: v.size_chart_id,
+          fit: v.fit, fabric: v.fabric, gsm: v.gsm, print_type: v.print_type, wash_care: v.wash_care, status: 'ativo', catalog_visible: true,
+        }, { colors: selectedColors, onSaved });
+      }
     } catch (err) {
       toastError('Não consegui salvar', friendlyError(err));
     }
-  }));
+  });
+  const ok = m.foot.querySelector('[data-ok]');
+  ok.addEventListener('click', () => submit(ok, false));
+  const okNext = m.foot.querySelector('[data-ok-next]');
+  okNext?.addEventListener('click', () => submit(okNext, true));
 
   drawColors();
   drawMatrix();
   updateMargin();
+}
+
+/** Cor nova sem sair do cadastro do produto. O código do SKU sai do nome. */
+function openNewColor(done) {
+  const m = openModal({
+    title: 'Nova cor',
+    body: `<div class="form-grid">
+      ${field('Nome', '<input class="input" name="name" placeholder="Verde musgo" data-autofocus>', 8)}
+      ${field('Cor', '<input class="input" type="color" name="hex" value="#3a3a3a" style="padding:4px;height:42px">', 4)}
+    </div>`,
+    footer: '<button class="btn" data-close>Cancelar</button><button class="btn btn-primary" data-ok>Criar cor</button>',
+  });
+  const ok = m.foot.querySelector('[data-ok]');
+  ok.addEventListener('click', () => withLoading(ok, async () => {
+    const name = m.panel.querySelector('[name=name]').value.trim();
+    if (!name) { toast('Informe o nome da cor', { kind: 'warn' }); return; }
+    const used = new Set(Data.colors().map((c) => c.code));
+    const base = fold(name).replace(/[^a-z0-9]/g, '').toUpperCase().slice(0, 3).padEnd(2, 'X');
+    let code = base;
+    for (let i = 2; used.has(code) && i < 10; i += 1) code = `${base.slice(0, 3)}${i}`;
+    try {
+      const c = await Data.saveRow('colors', { name, hex: m.panel.querySelector('[name=hex]').value, code });
+      m.close();
+      toast('Cor criada');
+      done(c);
+    } catch (err) { toastError('Não consegui criar', friendlyError(err)); }
+  }));
 }
 
 /* ---------------------------------------------------- reajuste em lote -- */

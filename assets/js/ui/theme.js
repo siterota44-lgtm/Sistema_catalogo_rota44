@@ -36,7 +36,7 @@ function syncMetaThemeColor() {
     meta.name = 'theme-color';
     document.head.appendChild(meta);
   }
-  meta.content = isDark() ? '#0b0b0c' : '#eeece7';
+  meta.content = isDark() ? '#070708' : '#e6e3dd';
 }
 
 /* ------------------------------------------------------- privacidade -- */

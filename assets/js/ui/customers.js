@@ -117,7 +117,7 @@ export function openCustomerForm(c, done) {
         <div class="span-12">${checkbox('marketing_consent', 'Aceita receber novidades e promoções (LGPD)', c?.marketing_consent)}</div>
       </form>`,
     footer: `
-      ${c ? '<button class="btn btn-ghost" data-anon style="margin-right:auto">Apagar dados (LGPD)</button>' : ''}
+      ${c && Data.canMargin() ? '<button class="btn btn-ghost" data-anon style="margin-right:auto">Apagar dados (LGPD)</button>' : ''}
       <button class="btn" data-close>Cancelar</button><button class="btn btn-primary" data-ok>Salvar</button>`,
   });
   const form = $('[data-f]', m.panel);
@@ -155,10 +155,7 @@ export function openCustomerForm(c, done) {
     });
     if (!yes) return;
     try {
-      await Data.saveRow('customers', {
-        id: c.id, name: 'Cliente removido', phone: '', cpf: '', email: '', instagram: '', birthday: null, cep: '', address: '', city: '',
-        notes: '', marketing_consent: false, deleted_at: new Date().toISOString(),
-      });
+      await Data.anonymizeCustomer(c.id);
       m.close();
       toast('Dados apagados');
       done?.(null);

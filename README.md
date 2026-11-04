@@ -42,7 +42,7 @@ O `netlify.toml` já diz tudo: comando `node netlify/build.mjs`, pasta `dist`.
 
 Só a `dist/` vai para o ar: SQL, testes e documentos nunca são publicados.
 
-**Se o endereço final não for `rota-44.netlify.app`:** troque-o no `index.html` (`og:url` e `og:image`,
+**Se o endereço final não for `rota44.netlify.app`:** troque-o no `index.html` (`og:url` e `og:image`,
 é a prévia do link no WhatsApp), no `robots.txt` e no `sitemap.xml`.
 
 ### 4. Conferir
@@ -84,17 +84,17 @@ Editor rode `schema.sql` → `2_login.sql` → `1_dados.sql`. **Cuidado:** o `1_
 
 | Tela | O quê |
 |---|---|
-| **Painel** | Hoje, 7 dias e mês com comparação; "precisa de atenção"; mais vendidos |
+| **Painel** | Atalhos do dia a dia, primeiros passos da loja nova, hoje/7 dias/mês com comparação, "precisa de atenção", mais vendidos |
 | **PDV** | Bipa o código (USB ou câmera), grade cor × tamanho, cliente, desconto, cupom, vários pagamentos, troco, Pix com desconto, crediário, comprovante térmico e WhatsApp. Rascunho sobrevive a fechar a tela |
-| **Vendas** | Funil (aguardando → pago → separação → enviado/retirada → entregue), pagamento depois, estorno, rastreio, cancelar com motivo |
+| **Vendas** | Funil (aguardando → pago → separação → enviado/retirada → entregue) com o próximo passo a um toque na lista, pagamento depois, estorno, rastreio, cancelar com motivo |
 | **Pedidos do catálogo** | O que chegou pelo site: vira venda com 1 toque. Lista do "avise-me" |
 | **Trocas** | Troca gera vale-troca; devolução estorna; peça com defeito vai para avaria |
 | **Caixa** | Abertura, sangria, suprimento, fechamento conferido por forma de pagamento |
 | **Clientes** | Histórico, tamanhos preferidos, segmentos (VIP, inativos, aniversariantes), exportar e apagar dados (LGPD) |
-| **Produtos** | Variações automáticas, fotos por cor, margem, reajuste em lote, histórico de preço |
+| **Produtos** | Só o essencial à vista: variações automáticas, cor nova na hora, mesma quantidade em tudo, "criar e cadastrar outra", fotos por cor (arrastar e colar), link da peça para mandar ao cliente, margem, reajuste em lote, histórico de preço |
 | **Categorias e drops** | Árvore de categorias, drops com data e limite por cliente, marcas, cores, grades, medidas |
 | **Promoções e cupons** | % por loja, categoria, drop ou produto; cupons com validade e limite |
-| **Estoque** | Físico × reservado × disponível, curva de grade, kardex, repor, parados, contagem física |
+| **Estoque** | "Chegou peça" em uma tela, físico × reservado × disponível, curva de grade, kardex, repor, parados, contagem física |
 | **Compras** | Lançamento em grade, recebimento parcial, frete rateado, custo médio, conta a pagar |
 | **Etiquetas** | 50×30 mm com código de barras e preço (de/por em promoção) |
 | **Financeiro** | DRE simples, fluxo de caixa com previsto (cartão cai depois), contas a pagar e receber |
@@ -102,9 +102,11 @@ Editor rode `schema.sql` → `2_login.sql` → `1_dados.sql`. **Cuidado:** o `1_
 | **Catálogo online** | Abrir/fechar, link, QR code, textos e regras da vitrine |
 | **Ajustes** | Dados da loja, taxas, equipe, senha de liberação, backup, auditoria, diagnóstico |
 
-**Catálogo público:** herói com o muro de grafite, drops com contagem regressiva, filtros (categoria, tamanho, cor, preço,
-modelagem...), busca que tolera erro de digitação, ficha com galeria por cor e tamanho esgotado riscado, tabela de medidas,
-"avise-me", sacola com cupom e pedido no WhatsApp. Modo claro e escuro. Aparece no Google (o sistema não).
+**Catálogo público:** um app de uma tela, como o da Sua Sesh: marca compacta, busca e categorias sempre à mão, peças em destaque
+de cara, prateleiras por categoria e sacola fixa embaixo. Drops com contagem regressiva, filtros (tamanho, cor, preço, modelagem...),
+busca que tolera erro de digitação, ficha com galeria por cor e tamanho esgotado riscado, tabela de medidas, "avise-me", cupom e pedido
+no WhatsApp. Abre no escuro, com botão para o claro. Links diretos: `#p=peça`, `#c=categoria`, `#d=drop`.
+Aparece no Google (o sistema não).
 
 ### Perfis
 

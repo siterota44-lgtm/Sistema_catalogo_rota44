@@ -3,7 +3,7 @@
 import { esc, money, thumbUrl, downloadFile, toCSV, formatDate } from '../core/utils.js';
 import { fold } from '../core/calc.js';
 import { icon } from './icons.js';
-import { toastError } from './kit.js';
+import { toast, toastError } from './kit.js';
 import * as Data from '../core/data.js';
 import { friendlyError } from '../core/errors.js';
 
@@ -130,6 +130,8 @@ const TOUCH = window.matchMedia('(hover: none) and (pointer: coarse)');
  * Galeria do produto: várias fotos, cada uma com a sua cor (ou "todas"), ordem
  * por setas e a primeira é a capa. Sobe na hora; o formulário guarda as URLs.
  */
+export const MAX_PHOTOS = 4;
+
 export function mountGallery(box, { images = [], colors = () => [], onChange } = {}) {
   let list = images.map((i) => ({ url: i.url, color_id: i.color_id || '' }));
   let busy = 0;
@@ -154,18 +156,22 @@ export function mountGallery(box, { images = [], colors = () => [], onChange } =
               ${cols.map((c) => `<option value="${esc(c.id)}"${c.id === im.color_id ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}
             </select>
           </div>`).join('')}
-        <label class="gallery-add">
+        ${list.length + busy < MAX_PHOTOS || busy ? `<label class="gallery-add">
           ${busy ? '<span class="spinner"></span><span>Enviando…</span>' : `${icon('camera')}<span>Adicionar fotos</span>`}
           <input type="file" accept="image/*" multiple data-file hidden>
-        </label>
+        </label>` : ''}
       </div>
-      ${TOUCH.matches ? '' : '<span class="xs dim">Selecione várias de uma vez, arraste para cá ou cole com Ctrl+V. A primeira é a capa.</span>'}`;
+      <span class="xs dim">Até ${MAX_PHOTOS} fotos: ${list.length} de ${MAX_PHOTOS}. A primeira é a capa.${TOUCH.matches ? '' : ' Dá para selecionar várias, arrastar para cá ou colar com Ctrl+V.'}</span>`;
   };
 
   const emit = () => onChange?.(list);
 
   async function take(files) {
-    const only = [...files].filter((f) => /^image\//.test(f.type || 'image/'));
+    const images_ = [...files].filter((f) => /^image\//.test(f.type || 'image/'));
+    const room = Math.max(MAX_PHOTOS - list.length - busy, 0);
+    const only = images_.slice(0, room);
+    if (images_.length > room) toast(`Cada peça tem até ${MAX_PHOTOS} fotos. ${room ? `Entraram só ${room}.` : 'Tire uma para colocar outra.'}`, { kind: 'warn' });
+    if (!only.length) return;
     busy += only.length;
     render();
     for (const f of only) {
@@ -215,33 +221,47 @@ export function mountGallery(box, { images = [], colors = () => [], onChange } =
   return { get value() { return list; }, get busy() { return busy > 0; }, refresh: render };
 }
 
-/** Uma foto só (categoria, banner do drop). */
+/** Uma foto só (categoria, banner do drop): câmera ou galeria no celular; arrastar ou colar no computador. */
 export function mountPhoto(box, { value = '', label = 'Foto', onChange } = {}) {
   let url = value;
   let busy = false;
   const render = () => {
     box.innerHTML = `
       <div class="photo-one">
-        <div class="gallery-photo">
-          ${url ? `<img src="${esc(url)}" alt="${esc(label)}">` : `<span class="ph" style="position:absolute;inset:0;display:grid;place-items:center;color:var(--text-3)">${icon('image')}</span>`}
+        <div class="gallery-photo${busy ? ' is-busy' : ''}" data-drop>
+          ${url ? `<img src="${esc(url)}" alt="${esc(label)}">` : `<span class="ph photo-empty">${icon('camera')}<span>Sem foto</span></span>`}
+          ${busy ? '<span class="photo-busy"><span class="spinner"></span></span>' : ''}
         </div>
-        <div class="col gap-2">
-          <label class="btn btn-sm">${busy ? 'Enviando…' : url ? 'Trocar' : 'Escolher foto'}<input type="file" accept="image/*" data-file hidden></label>
-          ${url ? '<button type="button" class="btn btn-ghost btn-sm" data-rm>Remover</button>' : ''}
+        <div class="col gap-2 photo-actions">
+          ${TOUCH.matches ? `
+            <label class="btn btn-sm${busy ? ' is-disabled' : ''}">${icon('camera')} Câmera<input type="file" accept="image/*" capture="environment" data-file hidden ${busy ? 'disabled' : ''}></label>
+            <label class="btn btn-sm${busy ? ' is-disabled' : ''}">${icon('image')} Galeria<input type="file" accept="image/*" data-file hidden ${busy ? 'disabled' : ''}></label>`
+          : `<label class="btn btn-sm${busy ? ' is-disabled' : ''}">${icon('image')} ${busy ? 'Enviando…' : url ? 'Trocar foto' : 'Escolher foto'}<input type="file" accept="image/*" data-file hidden ${busy ? 'disabled' : ''}></label>`}
+          ${url && !busy ? `<button type="button" class="btn btn-ghost btn-sm" data-rm>${icon('trash')} Remover</button>` : ''}
+          ${TOUCH.matches ? '' : '<span class="xs dim">ou arraste / cole a imagem (Ctrl+V)</span>'}
         </div>
       </div>`;
   };
-  box.addEventListener('change', async (e) => {
-    const f = e.target.closest('[data-file]')?.files?.[0];
-    if (!f) return;
+  async function take(f) {
+    if (!f || busy) return;
+    if (!/^image\//.test(f.type || 'image/')) { toastError('Isso não é uma imagem', 'Escolha uma foto JPG, PNG ou HEIC.'); return; }
     busy = true; render();
     try { url = await Data.uploadImage(f); onChange?.(url); }
     catch (err) { toastError('Não consegui enviar a foto', friendlyError(err)); }
     finally { busy = false; render(); }
-  });
+  }
+  box.addEventListener('change', (e) => { take(e.target.closest('[data-file]')?.files?.[0]); });
   box.addEventListener('click', (e) => {
     if (e.target.closest('[data-rm]')) { url = ''; onChange?.(url); render(); }
   });
+  box.addEventListener('dragover', (e) => { e.preventDefault(); });
+  box.addEventListener('drop', (e) => { e.preventDefault(); take(e.dataTransfer?.files?.[0]); });
+  const onPaste = (e) => {
+    if (!box.isConnected) { document.removeEventListener('paste', onPaste); return; }
+    const f = [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith('image/'));
+    if (f) { e.preventDefault(); take(f); }
+  };
+  if (!TOUCH.matches) document.addEventListener('paste', onPaste);
   render();
   return { get value() { return url; }, get busy() { return busy; } };
 }

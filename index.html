@@ -30,7 +30,7 @@
     GET simples, sem cabeçalhos: o navegador não faz a consulta extra (CORS).
     A chave é a "publishable": a mesma do config.js, feita para ser pública.
   -->
-  <link rel="preload" as="fetch" crossorigin="anonymous" href="https://jjynilzpcekissqkbigj.supabase.co/rest/v1/rpc/public_catalog?apikey=sb_publishable_VuIb8VQW_25fDUxTk1O81Q_40Cl9ES0">
+  <!-- Sem rel=preload da lista de peças: no Safari ela repetia a resposta antiga mesmo recarregando a página. -->
   <link rel="modulepreload" href="assets/js/catalog.js">
   <link rel="modulepreload" href="assets/js/config.js">
   <link rel="modulepreload" href="assets/js/core/utils.js">

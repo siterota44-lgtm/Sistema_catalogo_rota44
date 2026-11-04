@@ -58,9 +58,12 @@ async function rpc(fn, body) {
   } finally { clearTimeout(timer); }
 }
 
+let loadedAt = Date.now();
+
 async function loadCatalog() {
-  // mesma URL do <link rel="preload">: a resposta já pode estar pronta
-  const r = await fetch(`${REST}/public_catalog?apikey=${encodeURIComponent(CFG.anonKey)}`, { mode: 'cors', credentials: 'omit' });
+  loadedAt = Date.now();
+  // no-store: estoque e preço precisam vir novos a cada abertura
+  const r = await fetch(`${REST}/public_catalog?apikey=${encodeURIComponent(CFG.anonKey)}`, { mode: 'cors', credentials: 'omit', cache: 'no-store' });
   if (!r.ok) {
     const e = await r.json().catch(() => ({}));
     const err = new Error(e.message || `HTTP ${r.status}`);
@@ -289,7 +292,7 @@ function shell() {
         ${shield('k-shield')}
         <div class="k-brand">
           <h1>ROTA <b>44</b></h1>
-          <p>${esc(s.tagline || 'Streetwear das ruas')}</p>
+          <p>${esc(s.tagline || 'Streetwear pra quem vive a rua.')}</p>
         </div>
         <div class="k-top-actions">
           ${wa ? `<a class="k-wa" href="${esc(wa)}" target="_blank" rel="noopener">${icon('whatsapp')}<span>Falar</span></a>` : ''}
@@ -299,27 +302,74 @@ function shell() {
       ${s.announcement ? `<div class="k-announce">${esc(s.announcement)}</div>` : '<div class="k-stripe"></div>'}
       ${DRIP}
     </header>
+    <nav class="k-cats" data-cats aria-label="Categorias"></nav>
     <div class="k-sticky">
       <div class="k-bar">
         <label class="k-search">${icon('search')}<input type="search" data-q placeholder="Buscar camiseta, baggy, moletom…" aria-label="Buscar peça" autocomplete="off" enterkeyhint="search"></label>
         <button class="k-filter" data-filters aria-label="Filtrar por tamanho, cor e preço">${icon('filter')}<span class="k-filter-t">Filtrar</span><b data-fcount hidden></b></button>
       </div>
-      <div class="k-chips" data-chips></div>
+      <div class="k-chips" data-chips aria-label="Categorias"></div>
     </div>
     <main class="k-main" id="k-main"></main>
-    <footer class="k-end">
-      ${shield()}
-      <nav aria-label="Sobre a loja">
-        <a href="#i=sobre">Sobre</a><a href="#i=trocas">Trocas</a><a href="#i=frete">Frete</a><a href="#i=privacidade">Privacidade</a>
-      </nav>
-      <p>${[s.instagram ? `<a href="https://instagram.com/${esc(s.instagram.replace('@', ''))}" target="_blank" rel="noopener">${esc(s.instagram)}</a>` : '', esc(s.address || ''), esc(s.hours || '')].filter(Boolean).join(' · ')}</p>
-      <p class="k-end-small">Preço e disponibilidade conferidos na confirmação do pedido · <a href="sistema">Área da loja</a></p>
-    </footer>
+    ${footerHTML()}
     <button class="k-bag-bar" data-bag data-bag-bar hidden>
       ${icon('box')}<b data-n class="k-bag-n">0</b><span>Ver sacola</span><b data-t class="k-bag-t"></b>
     </button>
     <div class="k-toasts" role="status" aria-live="polite"></div>`;
   drawChips();
+  watchCats();
+}
+
+/** @rota44, rota44 ou o link inteiro: guarda só o nome. */
+const handleOf = (v) => String(v || '').trim().replace(/^https?:\/\/(www\.)?[^/]+\/@?/i, '').replace(/^@/, '').replace(/[/?#].*$/, '');
+
+/** Rodapé com os dados que a loja cadastrou em Ajustes. Campo vazio não aparece. */
+function footerHTML() {
+  const s = store();
+  const name = s.store_name || 'Rota 44';
+  const wa = whatsappLink(s.whatsapp, 'Fala, Rota 44! Vim pelo catálogo.');
+  const digits = onlyDigits(s.whatsapp);
+  const ig = handleOf(s.instagram);
+  const tk = handleOf(s.tiktok);
+  const trust = [
+    s.exchange_days > 0 ? ['refresh', `Troca em até ${s.exchange_days} dias`] : null,
+    s.max_installments > 1 ? ['card', `Parcelamos em até ${s.max_installments}x`] : ['card', 'Pix e cartão'],
+    s.pix_discount_pct > 0 ? ['cash', `${Number(s.pix_discount_pct)}% de desconto no Pix`] : null,
+    s.free_shipping_over > 0 ? ['truck', `Frete grátis acima de ${money(s.free_shipping_over)}`] : ['truck', 'Retirada ou envio'],
+  ].filter(Boolean);
+  const contact = [
+    wa ? `<a href="${esc(wa)}" target="_blank" rel="noopener">${icon('whatsapp')} ${esc(maskPhone(digits.length > 11 && digits.startsWith('55') ? digits.slice(2) : digits))}</a>` : '',
+    ig ? `<a href="https://instagram.com/${esc(encodeURIComponent(ig))}" target="_blank" rel="noopener">${icon('instagram')} @${esc(ig)}</a>` : '',
+    tk ? `<a href="https://www.tiktok.com/@${esc(encodeURIComponent(tk))}" target="_blank" rel="noopener">${icon('tiktok')} @${esc(tk)}</a>` : '',
+    s.email ? `<a href="mailto:${esc(s.email)}">${icon('mail')} ${esc(s.email)}</a>` : '',
+  ].filter(Boolean).join('');
+  const where = [
+    s.address ? `<a href="https://www.google.com/maps/search/?api=1&query=${esc(encodeURIComponent(s.address))}" target="_blank" rel="noopener">${icon('pin')} ${esc(s.address)}</a>` : '',
+    s.hours ? `<span>${icon('clock')} ${esc(s.hours)}</span>` : '',
+  ].filter(Boolean).join('');
+  const when = new Date(cat.now || Date.now());
+  const today = new Date().toDateString() === when.toDateString();
+  const updated = today ? `hoje às ${when.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : `em ${when.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}`;
+  return `
+    <footer class="k-end">
+      <div class="k-end-in">
+        <div class="k-end-brand">
+          ${shield()}
+          <div><b>${esc(name)}</b><p>${esc(s.about || s.tagline || '')}</p></div>
+        </div>
+        <div class="k-end-trust">${trust.map(([ic, t]) => `<span>${icon(ic)} ${esc(t)}</span>`).join('')}</div>
+        <div class="k-end-cols">
+          ${contact ? `<div><h4>Atendimento</h4>${contact}</div>` : ''}
+          ${where ? `<div><h4>Onde estamos</h4>${where}</div>` : ''}
+          ${s.shipping_info ? `<div><h4>Entrega</h4><p>${esc(s.shipping_info)}</p></div>` : ''}
+          <div><h4>Como comprar</h4><p>Escolha a peça, monte a sacola e envie pelo WhatsApp: a loja confirma tudo com você.</p></div>
+        </div>
+        <div class="k-end-bottom">
+          <span>© ${new Date().getFullYear()} ${esc(name)}</span>
+          <span>Catálogo atualizado ${esc(updated)}</span>
+        </div>
+      </div>
+    </footer>`;
 }
 
 /** Tinta vermelha escorrendo por baixo da faixa da marca. Desenhada aqui, sem imagem. */
@@ -341,19 +391,57 @@ const DRIP = (() => {
   return `<svg class="k-drip" viewBox="0 0 1200 40" preserveAspectRatio="none" aria-hidden="true"><path d="${d}L0 4Z"/></svg>`;
 })();
 
+/** Foto do botão da categoria: a que a loja escolheu; sem ela, a de uma filha ou a de uma peça. */
+function categoryCover(c) {
+  const tree = categoryIds(c.id);
+  const own = (cat.categories || []).find((x) => tree.has(x.id) && x.image_url);
+  if (c.image_url || own) return c.image_url || own.image_url;
+  const items = products().filter((p) => inCategory(p, tree) && coverOf(p));
+  return coverOf(items.find(hasStock) || items[0] || {});
+}
+
+function dropCover(d) {
+  return d.banner_url || coverOf(products().find((p) => p.collection_id === d.id && coverOf(p)) || {});
+}
+
 function drawChips() {
-  const box = ROOT.querySelector('[data-chips]');
   const promos = products().some((p) => !p.coming_soon && (() => { const x = bestPrice(p); return x.price < x.list; })());
-  const drops = cat.collections || [];
-  box.innerHTML = `
-    <button class="k-chip" data-chip="" aria-pressed="${!st.cat && !st.drop && !st.promo}">Tudo</button>
-    ${promos ? `<button class="k-chip hot" data-chip="promo" aria-pressed="${st.promo}">Promoção</button>` : ''}
-    ${drops.map((d) => `<button class="k-chip hot" data-chip="d:${esc(d.id)}" aria-pressed="${st.drop === d.id}">${esc(d.name)}</button>`).join('')}
-    ${shelves().map((c) => `<button class="k-chip" data-chip="c:${esc(c.id)}" aria-pressed="${st.cat === c.id}">${esc(c.name)}</button>`).join('')}`;
+  const cats_ = shelves();
+  // link direto para uma subcategoria: o botão dela aparece junto
+  const picked = st.cat && !cats_.some((c) => c.id === st.cat) ? idx.categories.get(st.cat) : null;
+  const opts = [
+    { key: '', name: 'Tudo', on: !st.cat && !st.drop && !st.promo, ic: 'grid' },
+    ...(promos ? [{ key: 'promo', name: 'Promoção', on: st.promo, ic: 'tag', hot: true }] : []),
+    ...(cat.collections || []).map((d) => ({ key: `d:${d.id}`, name: d.name, on: st.drop === d.id, url: dropCover(d), hot: true })),
+    ...[...(picked ? [picked] : []), ...cats_].map((c) => ({ key: `c:${c.id}`, name: c.name, on: st.cat === c.id, url: categoryCover(c) })),
+  ];
+  const tiles = ROOT.querySelector('[data-cats]');
+  const box = ROOT.querySelector('[data-chips]');
+  const keep = [tiles.scrollLeft, box.scrollLeft];
+  // com uma categoria só não há o que escolher
+  tiles.hidden = box.hidden = opts.length < 3;
+  tiles.innerHTML = opts.map((o) => `
+    <button class="k-cat ${o.hot ? 'hot' : ''}" data-chip="${esc(o.key)}" aria-pressed="${o.on}">
+      <span class="k-cat-img">${o.url ? img(o.url, '') : icon(o.ic || 'grid')}</span>
+      <span class="k-cat-name">${esc(o.name)}</span>
+    </button>`).join('');
+  box.innerHTML = opts.map((o) => `<button class="k-chip ${o.hot ? 'hot' : ''}" data-chip="${esc(o.key)}" aria-pressed="${o.on}" tabindex="-1">${esc(o.name)}</button>`).join('');
+  [tiles.scrollLeft, box.scrollLeft] = keep;
   const n = panelCount();
   const b = ROOT.querySelector('[data-fcount]');
   b.hidden = !n;
   b.textContent = n;
+}
+
+/** Rolou e as fotos das categorias saíram da tela: entram os nomes, na barra fixa. */
+function watchCats() {
+  const tiles = ROOT.querySelector('[data-cats]');
+  const bar = ROOT.querySelector('.k-sticky');
+  if (!('IntersectionObserver' in window)) return;
+  new IntersectionObserver(([e]) => {
+    bar.classList.toggle('stuck', !e.isIntersecting);
+    ROOT.querySelectorAll('.k-chip[data-chip]').forEach((b) => (e.isIntersecting ? b.setAttribute('tabindex', '-1') : b.removeAttribute('tabindex')));
+  }, { rootMargin: '-64px 0px 0px 0px' }).observe(tiles);
 }
 
 function countdownHTML(at) {
@@ -589,6 +677,7 @@ function openProduct(p) {
             <input class="k-input" name="phone" inputmode="tel" placeholder="WhatsApp com DDD" autocomplete="tel" required aria-label="WhatsApp">
           </div>
           <button class="k-btn ghost" type="submit">Quero ser avisado</button>
+          <p class="k-note">Usamos seu WhatsApp só para este aviso.</p>
         </form>` : '';
     }
     const add = el.querySelector('[data-add]');
@@ -926,7 +1015,8 @@ function wire() {
       st.promo = v === 'promo';
       drawChips();
       drawGrid();
-      window.scrollTo({ top: Math.min(window.scrollY, ROOT.querySelector('.k-top').offsetHeight), behavior: 'instant' });
+      const tiles = ROOT.querySelector('[data-cats]');
+      window.scrollTo({ top: Math.min(window.scrollY, tiles.hidden ? ROOT.querySelector('.k-top').offsetHeight : tiles.offsetTop + tiles.offsetHeight), behavior: 'instant' });
       return;
     }
     if (e.target.closest('[data-only]')) { st.onlyAvail = !st.onlyAvail; drawGrid(); return; }
@@ -980,6 +1070,26 @@ async function boot() {
   saveBag();
   handleHash();
 }
+
+/**
+ * Voltou para a aba depois de um tempo (no iPhone ela fica parada em segundo
+ * plano): busca de novo, para não vender peça que acabou nem esconder a que chegou.
+ */
+async function refreshIfStale() {
+  if (!cat?.open || document.visibilityState !== 'visible' || Date.now() - loadedAt < 60000 || document.querySelector('dialog[open]')) return;
+  try {
+    const fresh = await loadCatalog();
+    if (!fresh.open) { location.reload(); return; }
+    cat = fresh;
+    indexCatalog();
+    bag = bag.filter((i) => idx.variants.has(i.variant_id));
+    drawChips();
+    drawGrid();
+    saveBag();
+  } catch { /* sem internet agora: fica com o que já tem na tela */ }
+}
+document.addEventListener('visibilitychange', refreshIfStale);
+window.addEventListener('pageshow', (e) => { if (e.persisted) refreshIfStale(); });
 
 initTelemetry();
 setSender((rows) => rpc('log_client_error', { p: rows }));

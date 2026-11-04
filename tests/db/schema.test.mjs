@@ -78,7 +78,7 @@ await expectError(() => rpc('member_upsert', { email: 'naoexiste@x.com', nome: '
 await as('authenticated', vendedorId);
 await expectError(() => rpc('member_upsert', { email: 'intruso@rota44.test', nome: 'I', role: 'admin' }), /não tem permissão/, 'vendedor não mexe na equipe');
 let who = await one(`select public.whoami() w`);
-ok(who.w.role === 'vendedor' && who.w.can_see_cost === false && who.w.schema_version === 2, 'whoami do vendedor: sem custo');
+ok(who.w.role === 'vendedor' && who.w.can_see_cost === false && who.w.schema_version === 3, 'whoami do vendedor: sem custo');
 
 section('Anônimo: portas fechadas');
 await as('anon', null);
@@ -311,7 +311,7 @@ const rec = await one(`insert into public.bills (kind, description, due_date, am
 await rpc('pay_bill', { bill_id: rec.id, method: 'pix', paid_on: '2026-11-10' });
 ok((await one(`select count(*)::int c from public.bills where description='Aluguel' and status='aberta' and due_date='2026-12-10'`)).c === 1, 'conta mensal gera a do mês seguinte');
 await as('authenticated', gerenteId);
-ok((await all(`select * from public.bills`)).length === 0, 'gerente não vê financeiro (só admin)');
+ok((await all(`select * from public.bills where kind = 'pagar' or sale_id is null`)).length === 0, 'gerente não vê financeiro (só admin)');
 
 section('Ajuste de estoque e inventário');
 await as('authenticated', estoqueId);
@@ -433,6 +433,123 @@ await as('anon', null);
 await expectError(() => rpc('catalog_request', { customer_name: 'Tarde', items: [{ variant_id: P.id, qty: 1 }] }), /não estão mais disponíveis/, 'e não aceita pedido');
 await as(null); await db.query(`update public.collections set ends_at = null where id=$1`, [drop.id]);
 
+section('Fotos, categorias e parcelas');
+{
+await as('authenticated', gerenteId);
+await as(null); await db.query(`update public.store_members set active = true where user_id = $1`, [vendedorId]);
+await as('authenticated', gerenteId);
+const foto = (i) => ({ url: `https://x.test/f${i}.webp` });
+const peca = await rpc('save_product', { name: 'Peca Regras', grid_id: grid, category_id: catCam, base_price: 100, images: [1, 2, 3, 4].map(foto), variants: [{ color_id: preto, size_id: sizes[0].id, initial_stock: 20, cost: 10 }] });
+ok((await all(`select url from public.product_images where product_id=$1 order by sort`, [peca.id])).map((x) => x.url).join() === [1, 2, 3, 4].map((i) => foto(i).url).join(), '4 fotos por peça, na ordem escolhida');
+ok((await one(`select cover_url from public.products where id=$1`, [peca.id])).cover_url === foto(1).url, 'a primeira foto é a capa');
+await expectError(() => rpc('save_product', { id: peca.id, name: 'Peca Regras', images: [1, 2, 3, 4, 5].map(foto) }), /até 4 fotos/, 'a quinta foto é recusada');
+ok((await all(`select id from public.product_images where product_id=$1`, [peca.id])).length === 4, 'e as 4 continuam lá');
+await as(null);
+const outra = (await one(`insert into public.size_grids (name) values ('Grade Regras') returning id`)).id;
+const sizeP = (await one(`insert into public.sizes (grid_id, label) values ($1, 'P') returning id`, [outra])).id;
+await as('authenticated', gerenteId);
+await rpc('save_product', { id: peca.id, name: 'Peca Regras', grid_id: outra, category_id: catCam, base_price: 100, variants: [{ color_id: preto, size_id: sizeP, initial_stock: 30, cost: 10 }] });
+const fv = await one(`select * from public.product_variants where product_id=$1 and active`, [peca.id]);
+ok(fv.sku.endsWith('-P-2'), `trocar de grade não dá erro de SKU repetido: ${fv?.sku}`);
+
+await as(null);
+const req = (await one(`insert into public.catalog_requests (customer_name, items, total) values ('Req', '[]', 0) returning id`)).id;
+await as('authenticated', vendedorId);
+const dia = (await one(`select (now() at time zone 'America/Sao_Paulo')::date::text d`)).d;
+const rv = await rpc('save_sale', { request_id: req, sale_date: '2020-01-01', items: [{ variant_id: fv.id, qty: 1 }], payments: [{ method: 'pix', amount: 100 }] });
+ok((await one(`select sale_date::text d from public.sales where id=$1`, [rv.id])).d === dia, 'vendedor não lança venda com data antiga');
+await expectError(() => rpc('save_sale', { request_id: req, items: [{ variant_id: fv.id, qty: 1 }], payments: [{ method: 'pix', amount: 100 }] }), /já virou venda/, 'pedido do catálogo vira venda uma vez só');
+
+await as('authenticated', gerenteId);
+await db.query(`insert into public.coupons (code, kind, value) values ('REGRA10', 'percent', 10)`);
+const resv = await rpc('save_sale', { status: 'aguardando_pagamento', customer_name: 'Reserva', customer_phone: '44977776666', coupon_code: 'REGRA10', crediario: { installments: 2 }, items: [{ variant_id: fv.id, qty: 1 }] });
+const saldo0 = (await one(`select reserved from public.product_variants where id=$1`, [fv.id])).reserved;
+await as(null);
+await db.query(`update public.sales set reserved_until = now() - interval '1 hour' where id=$1`, [resv.id]);
+await db.query(`select public.release_expired_reservations()`);
+ok((await one(`select status from public.sales where id=$1`, [resv.id])).status === 'cancelado', 'reserva vencida cancela sozinha');
+ok((await all(`select id from public.coupon_uses where sale_id=$1`, [resv.id])).length === 0, 'e devolve o uso do cupom');
+ok((await all(`select id from public.bills where sale_id=$1 and status='aberta'`, [resv.id])).length === 0, 'e não deixa parcela em aberto');
+ok((await one(`select reserved from public.product_variants where id=$1`, [fv.id])).reserved === saldo0 - 1, 'e solta a peça');
+
+await as('authenticated', vendedorId);
+const cv = await rpc('save_sale', { customer_name: 'Parcelado', customer_phone: '44955554444', crediario: { installments: 2 }, items: [{ variant_id: fv.id, qty: 1 }] });
+await as('authenticated', gerenteId);
+const cg = await rpc('save_sale', { customer_name: 'Parcelado', customer_phone: '44955554444', crediario: { installments: 1 }, status: 'aguardando_pagamento', items: [{ variant_id: fv.id, qty: 1 }] });
+await as('authenticated', vendedorId);
+const minhas = await all(`select * from public.bills`);
+ok(minhas.length > 0 && minhas.every((b) => b.kind === 'receber' && b.sale_id), 'vendedor vê as parcelas das vendas dele');
+ok(!minhas.some((b) => b.sale_id === cg.id), 'e não as dos outros');
+await as('authenticated', estoqueId);
+ok((await all(`select * from public.bills`)).length === 0, 'estoquista não vê parcela nenhuma');
+await as('authenticated', adminId);
+const parcelaG = await one(`select id from public.bills where sale_id=$1`, [cg.id]);
+const contaPagar = (await one(`insert into public.bills (kind, description, due_date, amount) values ('pagar', 'Conta Regra', current_date, 10) returning id`)).id;
+await as('authenticated', vendedorId);
+await expectError(() => rpc('pay_bill', { bill_id: parcelaG.id, method: 'pix' }), /não encontrada/, 'vendedor não dá baixa em venda de outro');
+await expectError(() => rpc('pay_bill', { bill_id: contaPagar, method: 'pix' }), /não tem permissão/, 'vendedor não paga conta da loja');
+await rpc('pay_bill', { bill_id: minhas.find((b) => b.sale_id === cv.id).id, method: 'pix' });
+ok(n((await one(`select paid_total from public.sales where id=$1`, [cv.id])).paid_total) === 50, 'o balcão recebe a parcela na ficha da venda');
+await as('authenticated', gerenteId);
+await expectError(() => rpc('pay_bill', { bill_id: contaPagar, method: 'pix' }), /não tem permissão/, 'gerente não paga conta da loja');
+const pg = await one(`select id from public.sale_payments where sale_id=$1 and amount > 0`, [cv.id]);
+await rpc('reverse_payment', { payment_id: pg.id, reason: 'errado' });
+ok((await all(`select id from public.bills where sale_id=$1 and status='aberta'`, [cv.id])).length === 2, 'estornar a parcela paga reabre a parcela');
+await rpc('pay_bill', { bill_id: parcelaG.id, method: 'pix' });
+const quit = await one(`select status, stock_state from public.sales where id=$1`, [cg.id]);
+ok(quit.status === 'pago' && quit.stock_state === 'out', 'última parcela paga: pedido vira pago e a peça sai do estoque');
+
+await as('authenticated', adminId);
+const cxAberto = (await all(`select id from public.cash_sessions where opened_by=$1 and closed_at is null`, [adminId]))[0];
+const cxA = cxAberto || await rpc('open_cash', { opening_amount: 0 });
+const vdin = await rpc('save_sale', { items: [{ variant_id: fv.id, qty: 1 }], payments: [{ method: 'dinheiro', amount: 100 }] });
+await rpc('close_cash', { session_id: cxA.id, counted: { dinheiro: 0 } });
+await expectError(() => rpc('cancel_sale', { sale_id: vdin.id, reason: 'x', refund: true }), /Abra o caixa/, 'sem caixa aberto não devolve dinheiro no cancelamento');
+const itd = await one(`select id from public.sale_items where sale_id=$1`, [vdin.id]);
+await expectError(() => rpc('create_return', { sale_id: vdin.id, kind: 'devolucao', reason: 'cor', refund_method: 'dinheiro', items: [{ sale_item_id: itd.id, qty: 1 }] }), /Abra o caixa/, 'nem na devolução');
+
+await as('authenticated', gerenteId);
+const catA = (await one(`insert into public.categories (name, slug) values ('Regra A', 'regra-a') returning id`)).id;
+const catB = (await one(`insert into public.categories (name, slug) values ('Regra B', 'regra-b') returning id`)).id;
+const catF = (await one(`insert into public.categories (name, slug, parent_id) values ('Regra F', 'regra-f', $1) returning id`, [catA])).id;
+await expectError(() => db.query(`select public.delete_category($1)`, [catA]), /subcategorias/, 'categoria com subcategoria não sai');
+await db.query(`select public.delete_category($1)`, [catF]);
+await as(null); await db.query(`update public.products set category_id=$1 where id=$2`, [catA, peca.id]);
+await as('authenticated', gerenteId);
+await expectError(() => db.query(`select public.delete_category($1)`, [catA]), /para qual categoria/, 'peça não fica solta ao excluir categoria');
+await db.query(`select public.delete_category($1, $2)`, [catA, catB]);
+ok((await one(`select category_id from public.products where id=$1`, [peca.id])).category_id === catB, 'as peças vão para a categoria escolhida');
+await as('authenticated', vendedorId);
+await expectError(() => db.query(`select public.delete_category($1, $2)`, [catB, catCam]), /não tem permissão/, 'vendedor não exclui categoria');
+
+await as(null);
+const cli = (await one(`insert into public.customers (name, phone) values ('Apagar', '44933332222') returning id`)).id;
+const rq2 = (await one(`insert into public.catalog_requests (customer_name, customer_phone, notes, items, total) values ('Apagar', '44933332222', 'obs', '[]', 0) returning id`)).id;
+await db.query(`insert into public.stock_alerts (variant_id, customer_name, phone) values ($1, 'Apagar', '44933332222')`, [fv.id]);
+await as('authenticated', gerenteId);
+await db.query(`select public.anonymize_customer($1)`, [cli]);
+await as(null);
+const rq3 = await one(`select customer_name, customer_phone, notes from public.catalog_requests where id=$1`, [rq2]);
+ok(rq3.customer_name === 'Cliente removido' && !rq3.customer_phone && !rq3.notes, 'LGPD: apaga também do pedido do catálogo');
+ok((await all(`select id from public.stock_alerts where phone='44933332222'`)).length === 0, 'e do avise-me');
+
+await db.query(`update public.store_settings set tagline='Streetwear das ruas: rap, skate e trap.', exchange_policy='Trocas em 30 dias. Confirme as regras com o contador/advogado da loja.'`);
+await db.exec(schema);
+const st1 = await one(`select tagline, exchange_policy from public.store_settings`);
+ok(st1.tagline === 'Streetwear pra quem vive a rua.', 'frase de fábrica é atualizada ao rodar o schema');
+ok(st1.exchange_policy === 'Trocas em 30 dias.', 'recado interno some da política de trocas');
+await db.query(`update public.store_settings set tagline='Minha frase', exchange_policy='Minha política'`);
+await db.exec(schema);
+const st2 = await one(`select tagline, exchange_policy from public.store_settings`);
+ok(st2.tagline === 'Minha frase' && st2.exchange_policy === 'Minha política', 'texto escrito pela loja não é mexido');
+ok((await one(`select count(*)::int c from public.sales`)).c > 0, 'rodar o schema de novo não apaga venda');
+await db.exec('begin');
+await db.query(`select public.public_catalog()`);
+const cacheH = (await one(`select current_setting('response.headers', true) h`)).h;
+await db.exec('commit');
+ok(JSON.parse(cacheH)[0]['Cache-Control'] === 'no-store', 'catálogo avisa o navegador para não reaproveitar resposta antiga');
+
+}
 section('Excluir produto só esconde');
 await as('authenticated', gerenteId);
 await db.query(`select public.delete_product($1)`, [prod.id]);

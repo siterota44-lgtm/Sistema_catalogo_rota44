@@ -9,7 +9,7 @@ import { fold } from '../core/calc.js';
 import { friendlyError } from '../core/errors.js';
 import { icon } from './icons.js';
 import { toast, toastError, openModal, withLoading, confirmDialog } from './kit.js';
-import { $, $$, table, head, field, options, readForm, checkbox, switchField, badge, mountPhoto, dot, emptyBox } from './common.js';
+import { $, $$, table, head, field, options, readForm, checkbox, switchField, badge, mountPhoto, dot, emptyBox, photo } from './common.js';
 
 const slugify = (s) => fold(s).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
 const TABS = { categorias: 'Categorias', drops: 'Drops', marcas: 'Marcas', cores: 'Cores', grades: 'Grades', medidas: 'Medidas' };
@@ -31,7 +31,7 @@ export function mount(host) {
   function body() {
     if (tab === 'categorias') {
       return table([
-        { label: 'Categoria', main: true, cell: (c) => `<div class="tree-indent-${Math.min(c.depth, 3)}"><span class="cell-primary">${esc(c.name)}</span><span class="cell-sub sku">SKU: ${esc(c.code)} · ${esc(c.slug)}</span></div>` },
+        { label: 'Categoria', main: true, cell: (c) => `<div class="cat-cell tree-indent-${Math.min(c.depth, 3)}"><span class="cat-thumb">${photo(c.image_url, c.name)}</span><span><span class="cell-primary">${esc(c.name)}</span><span class="cell-sub sku">SKU: ${esc(c.code)} · ${esc(c.slug)}</span></span></div>` },
         { label: 'Grade padrão', cell: (c) => esc(Data.grid(c.default_grid_id)?.name || '-') },
         { label: 'Produtos', right: true, cell: (c) => `<span class="num">${Data.products().filter((p) => p.category_id === c.id).length}</span>` },
         { label: 'Catálogo', cell: (c) => (c.visible ? badge('Visível', 'green') : badge('Oculta', 'gray')) },
@@ -97,7 +97,7 @@ export function mount(host) {
 }
 
 /** Modal padrão de cadastro: salvar e, se já existe, excluir. */
-function rowModal({ title, body, onSave, onDelete, size }) {
+function rowModal({ title, body, onSave, onDelete, size, deleteMessage, deleteFlow }) {
   const m = openModal({
     title, size,
     body: `<form class="form-grid" data-f novalidate>${body}</form>`,
@@ -107,6 +107,7 @@ function rowModal({ title, body, onSave, onDelete, size }) {
   const ok = m.foot.querySelector('[data-ok]');
   ok.addEventListener('click', () => withLoading(ok, async () => {
     try {
+      if (m.busy?.()) { toast('Espere a foto terminar de enviar', { kind: 'warn' }); return; }
       const done = await onSave(readForm($('[data-f]', m.panel)), m);
       if (done !== false) { m.close(); toast('Salvo'); }
     } catch (err) {
@@ -114,7 +115,8 @@ function rowModal({ title, body, onSave, onDelete, size }) {
     }
   }));
   m.foot.querySelector('[data-del]')?.addEventListener('click', async () => {
-    if (!(await confirmDialog({ title: 'Excluir este cadastro?', message: 'Se estiver em uso, o sistema recusa. Em vez de excluir, dá para desativar.', confirmText: 'Excluir', danger: true }))) return;
+    if (deleteFlow) { deleteFlow(m); return; }
+    if (!(await confirmDialog({ title: 'Excluir este cadastro?', message: deleteMessage || 'Se estiver em uso, o sistema recusa. Em vez de excluir, dá para desativar.', confirmText: 'Excluir', danger: true }))) return;
     try { await onDelete(); m.close(); toast('Excluído'); }
     catch (err) { toastError('Não deu para excluir', friendlyError(err)); }
   });
@@ -136,9 +138,11 @@ function categoryForm(c) {
       ${field('Grade padrão', `<select class="select" name="default_grid_id">${options(Data.grids(), c?.default_grid_id, { empty: 'Nenhuma' })}</select>`, 6)}
       ${field('Tabela de medidas', `<select class="select" name="size_chart_id">${options(Data.sizeCharts(), c?.size_chart_id, { empty: 'Nenhuma' })}</select>`, 6)}
       ${field('Descrição', `<input class="input" name="description" value="${esc(c?.description)}">`, 12)}
-      <div class="field span-12"><label class="label">Foto / banner</label><div data-photo></div></div>
+      <div class="field span-12"><label class="label">Foto da categoria</label><div data-photo></div>
+        <span class="xs dim">Aparece no botão da categoria, no topo do catálogo. Sem foto, usa a de uma peça dela.</span></div>
       <div class="span-12">${switchField('visible', 'Mostrar no catálogo', c ? c.visible : true)}</div>`,
-    onDelete: c ? () => Data.deleteRow('categories', c.id) : null,
+    onDelete: c ? () => {} : null,
+    deleteFlow: c ? (modal) => removeCategory(c, modal) : null,
     onSave: (v) => Data.saveRow('categories', {
       id: c?.id, name: v.name, slug: c?.slug || slugify(v.name), code: (v.code || 'GER').toUpperCase(),
       parent_id: v.parent_id || null, sort: Number(v.sort) || 0, default_grid_id: v.default_grid_id || null, size_chart_id: v.size_chart_id || null,
@@ -146,6 +150,36 @@ function categoryForm(c) {
     }),
   });
   img = mountPhoto($('[data-photo]', m.panel), { value: c?.image_url, label: 'Categoria' });
+  m.busy = () => img.busy;
+}
+
+/** Peça nunca fica sem categoria por engano: pergunta para onde ela vai. */
+async function removeCategory(c, modal) {
+  if (Data.categoryList().some((x) => x.parent_id === c.id)) {
+    toast('Esta categoria tem subcategorias: mova ou exclua elas antes', { kind: 'warn' });
+    return;
+  }
+  const n = Data.products().filter((p) => p.category_id === c.id).length;
+  if (!n) {
+    if (!(await confirmDialog({ title: `Excluir ${c.name}?`, confirmText: 'Excluir', danger: true }))) return;
+    try { await Data.deleteCategory(c.id); modal.close(); toast('Categoria excluída'); }
+    catch (err) { toastError('Não deu para excluir', friendlyError(err)); }
+    return;
+  }
+  const others = Data.categoryList().filter((x) => x.id !== c.id);
+  const d = openModal({
+    title: `Excluir ${c.name}?`,
+    body: `<p class="muted" style="margin-bottom:12px">${n} ${n === 1 ? 'peça está' : 'peças estão'} nesta categoria. Para onde ${n === 1 ? 'ela vai' : 'elas vão'}?</p>
+      <select class="select" data-dest aria-label="Mover para">${options(others, '', { empty: 'Escolha a categoria', label: (x) => `${'— '.repeat(x.depth)}${x.name}` })}</select>`,
+    footer: '<button class="btn" data-close>Cancelar</button><button class="btn btn-danger" data-ok>Mover e excluir</button>',
+  });
+  const ok = d.foot.querySelector('[data-ok]');
+  ok.addEventListener('click', () => withLoading(ok, async () => {
+    const to = d.panel.querySelector('[data-dest]').value;
+    if (!to) { toast('Escolha a categoria', { kind: 'warn' }); return; }
+    try { await Data.deleteCategory(c.id, to); d.close(); modal.close(); toast('Categoria excluída'); }
+    catch (err) { toastError('Não deu para excluir', friendlyError(err)); }
+  }));
 }
 
 const toLocalInput = (iso) => {
@@ -183,6 +217,7 @@ function dropForm(c) {
     }),
   });
   img = mountPhoto($('[data-photo]', m.panel), { value: c?.banner_url, label: 'Banner' });
+  m.busy = () => img.busy;
 }
 
 function brandForm(b) {

@@ -1,7 +1,7 @@
 /** Vendas: lista com filtros, ficha, funil, pagamentos, cancelamento. */
 
 import * as Data from '../core/data.js';
-import { esc, money, parseMoney, uid, todayISO, addDays, startOfMonth, formatDate, relativeDate, whatsappLink } from '../core/utils.js';
+import { esc, money, parseMoney, uid, todayISO, addDays, startOfMonth, formatDate, relativeDate, whatsappLink, maskPhone } from '../core/utils.js';
 import { SALE_STATUS, FLOW, CHANNELS, PAYMENT_METHODS, DELIVERY } from '../core/constants.js';
 import { friendlyError } from '../core/errors.js';
 import { icon } from './icons.js';
@@ -120,7 +120,9 @@ export function mount(host, ctx) {
     if (nx) {
       const s = Data.sale(nx.dataset.next);
       const n = nextStep(s);
-      if (n.pay) openPayment(s.id, () => {});
+      // crediário se recebe parcela por parcela, na ficha
+      if (n.pay && Data.bills().some((b) => b.sale_id === s.id && b.status === 'aberta')) openSale(s.id);
+      else if (n.pay) openPayment(s.id, () => {});
       else if (n.track) openTracking(s.id, () => {});
       else Data.setSaleStatus({ sale_id: s.id, status: n.to }).then(() => toast(SALE_STATUS[n.to].label)).catch((err) => toastError('Não deu para mudar', friendlyError(err)));
       return;
@@ -135,6 +137,27 @@ export function mount(host, ctx) {
 
 /* ------------------------------------------------------- ficha da venda */
 
+function openParcel(b, done) {
+  const m = openModal({
+    title: 'Receber parcela',
+    subtitle: `${b.description} · ${money(b.amount)}`,
+    body: `<div class="form-grid">
+      ${field('Data', `<input class="input" type="date" name="paid_on" value="${todayISO()}">`, 6)}
+      ${field('Forma', `<select class="select" name="method">${optionsMap({ pix: 'Pix', dinheiro: 'Dinheiro', debito: 'Débito', credito: 'Crédito' }, 'pix')}</select>`, 6)}
+    </div>`,
+    footer: '<button class="btn" data-close>Cancelar</button><button class="btn btn-primary" data-ok>Confirmar</button>',
+  });
+  const ok = m.foot.querySelector('[data-ok]');
+  ok.addEventListener('click', () => withLoading(ok, async () => {
+    try {
+      await Data.payBill({ bill_id: b.id, paid_on: m.panel.querySelector('[name=paid_on]').value, method: m.panel.querySelector('[name=method]').value });
+      m.close();
+      toast('Parcela recebida');
+      done();
+    } catch (err) { toastError('Não consegui receber', friendlyError(err)); }
+  }));
+}
+
 export function openSale(id) {
   const m = openModal({ title: 'Venda', size: 'lg', body: '<div data-sale></div>', footer: '<div class="row gap-2" data-actions style="flex-wrap:wrap;justify-content:flex-end;width:100%"></div>' });
   const body = $('[data-sale]', m.panel);
@@ -147,6 +170,8 @@ export function openSale(id) {
     const pays = Data.salePayments(id);
     const isManager = Data.canMargin();
     const canceled = s.status === 'cancelado';
+    const parcels = Data.bills().filter((b) => b.sale_id === id && b.kind === 'receber' && b.status !== 'cancelada').sort((a, b) => (a.installment_no || 0) - (b.installment_no || 0));
+    const hasOpenParcel = parcels.some((b) => b.status === 'aberta');
     m.panel.querySelector('.modal-head h2').textContent = `Venda ${code(s.number)}`;
 
     const cost = isManager ? items.reduce((sum, i) => sum + (i.qty - i.returned_qty) * Data.saleItemCost(i.id), 0) : 0;
@@ -164,7 +189,7 @@ export function openSale(id) {
         ${canceled ? `<div class="alert" data-kind="error">${icon('xCircle')}<div><b>Motivo:</b> ${esc(s.cancel_reason || '-')}</div></div>` : ''}
         ${s.status === 'aguardando_pagamento' && s.reserved_until ? `<div class="alert" data-kind="warn">${icon('clock')}<div>Peças reservadas até ${esc(new Date(s.reserved_until).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }))}. Sem pagamento até lá, a reserva cai sozinha.</div></div>` : ''}
         <dl class="kv">
-          <div><dt>Cliente</dt><dd>${esc(s.customer_name || 'Sem cadastro')}${s.customer_phone ? `<br><span class="small dim">${esc(s.customer_phone)}</span>` : ''}</dd></div>
+          <div><dt>Cliente</dt><dd>${esc(s.customer_name || 'Sem cadastro')}${s.customer_phone ? `<br><span class="small dim">${esc(maskPhone(s.customer_phone))}</span>` : ''}</dd></div>
           <div><dt>Data</dt><dd>${esc(formatDate(s.sale_date))}</dd></div>
           <div><dt>Canal</dt><dd>${esc(CHANNELS[s.channel] || s.channel)}</dd></div>
           <div><dt>Vendedor</dt><dd>${esc(Data.memberName(s.seller_id))}${s.approved_by ? `<br><span class="small dim">Desconto liberado por ${esc(Data.memberName(s.approved_by))}</span>` : ''}</dd></div>
@@ -201,13 +226,22 @@ export function openSale(id) {
               <span class="row gap-2"><b class="num money-sensitive ${Number(p.amount) < 0 ? 'tone-danger' : ''}">${esc(money(p.amount))}</b>
                 ${Data.canMargin() && Number(p.amount) > 0 && !canceled && !pays.some((x) => x.reverses_id === p.id) ? `<button class="btn btn-ghost btn-sm" data-reverse="${esc(p.id)}">Estornar</button>` : ''}</span>
             </div>`).join('')}</div>` : '<p class="small dim">Nada lançado ainda.</p>'}
+          ${parcels.length ? `
+            <div class="fieldset-title" style="margin:14px 0 6px">Parcelas do crediário</div>
+            <div class="pay-list">${parcels.map((b) => `
+              <div class="pay-line">
+                <span><b>${b.installment_no ? `${b.installment_no}/${b.installments}` : 'Parcela'}</b>
+                  <span class="xs dim">${b.status === 'paga' ? `paga em ${esc(formatDate(b.paid_on))}` : `vence ${esc(formatDate(b.due_date))}`}</span></span>
+                <span class="row gap-2"><b class="num money-sensitive">${esc(money(b.amount))}</b>
+                  ${b.status === 'aberta' && !canceled ? `<button class="btn btn-sm" data-bill="${esc(b.id)}">Receber</button>` : badge('Paga', 'green')}</span>
+              </div>`).join('')}</div>` : ''}
           ${Number(s.balance) > 0.005 && !canceled ? `<p class="small" style="margin-top:8px">Falta receber: <b class="num tone-danger money-sensitive">${esc(money(s.balance))}</b></p>` : ''}
         </div>
       </div>`;
 
     const wa = whatsappLink(s.customer_phone, receiptMessage(s));
     foot.innerHTML = `
-      ${!canceled && Number(s.balance) > 0.005 ? `<button class="btn btn-primary" data-pay>${icon('cash')} Receber</button>` : ''}
+      ${!canceled && Number(s.balance) > 0.005 && !hasOpenParcel ? `<button class="btn btn-primary" data-pay>${icon('cash')} Receber</button>` : ''}
       <button class="btn" data-receipt>${icon('print')} Comprovante</button>
       ${wa ? `<a class="btn" href="${esc(wa)}" target="_blank" rel="noopener">${icon('whatsapp')} WhatsApp</a>` : ''}
       ${!canceled && s.status !== 'aguardando_pagamento' ? `<button class="btn" data-tracking>${icon('truck')} Rastreio</button>` : ''}
@@ -227,6 +261,8 @@ export function openSale(id) {
     }
     if (e.target.closest('[data-receipt]')) { openReceipt(id); return; }
     if (e.target.closest('[data-pay]')) { openPayment(id, draw); return; }
+    const bill = e.target.closest('[data-bill]');
+    if (bill) { openParcel(Data.bills().find((b) => b.id === bill.dataset.bill), draw); return; }
     if (e.target.closest('[data-tracking]')) { openTracking(id, draw); return; }
     if (e.target.closest('[data-cancel]')) { openCancel(id, draw); return; }
     if (e.target.closest('[data-return]')) { openReturnForm(id, draw); return; }

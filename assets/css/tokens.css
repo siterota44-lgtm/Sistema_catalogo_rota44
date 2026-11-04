@@ -67,12 +67,12 @@
   --viz-grid: rgba(0, 0, 0, .08);
   --viz-track: rgba(0, 0, 0, .06);
 
-  /* --- forma: canto seco, mais rua --- */
-  --r-xs: 3px;
-  --r-sm: 5px;
-  --r-md: 7px;
-  --r-lg: 10px;
-  --r-xl: 14px;
+  /* --- forma: mesmos cantos da i7even --- */
+  --r-xs: 6px;
+  --r-sm: 9px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 22px;
   --r-full: 999px;
 
   /* --- profundidade --- */

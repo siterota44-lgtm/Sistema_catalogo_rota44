@@ -4,7 +4,7 @@
 // Postgres (PGlite), com o papel certo (anon ou authenticated) e transação por
 // requisição, como o PostgREST. Nada vai para o projeto real.
 
-import { chromium, devices } from 'playwright-core';
+import { chromium, webkit, devices } from 'playwright-core';
 import { PGlite } from '@electric-sql/pglite';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -160,7 +160,10 @@ async function restRpc(db, fn, args, uid) {
   return asRole(db, uid, async (tx) => {
     const r = await tx.query(sql, vals);
     const v = r.rows[0]?.v;
-    return { status: 200, body: v === undefined || v === '' ? null : v };
+    // como o PostgREST: a função pode definir cabeçalhos da resposta
+    const h = (await tx.query(`select current_setting('response.headers', true) h`)).rows[0]?.h;
+    const headers = h ? Object.assign({}, ...JSON.parse(h)) : {};
+    return { status: 200, body: v === undefined || v === '' ? null : v, headers };
   });
 }
 
@@ -206,20 +209,44 @@ const subOf = (auth) => {
   try { return JSON.parse(Buffer.from(parts[1], 'base64url').toString()).sub || null; } catch { return null; }
 };
 
-const uploads = new Map();
+export const uploads = new Map();
 
 /**
  * Abre um contexto de navegador ligado ao banco.
  * @param {{ device?: string|object, theme?: 'light'|'dark' }} opts
  */
 export async function open(db, { device = 'Desktop', theme = 'dark', reduced = true } = {}) {
-  const browser = await chromium.launch({ executablePath: CHROME });
+  // E2E_ENGINE=webkit: o mesmo teste no motor do Safari do iPhone
+  const browser = process.env.E2E_ENGINE === 'webkit' ? await webkit.launch() : await chromium.launch({ executablePath: CHROME });
   const base = typeof device === 'object' ? device : device === 'Desktop' ? { viewport: { width: 1366, height: 860 } } : devices[device];
   const ctx = await browser.newContext({ ...base, colorScheme: theme, reducedMotion: reduced ? 'reduce' : 'no-preference' });
   const errors = [];
   const external = new Set();
   const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*', 'access-control-expose-headers': '*' };
 
+  // No WebKit o Playwright não entrega o corpo do envio: pega o arquivo antes de sair da página.
+  if (process.env.E2E_ENGINE === 'webkit') {
+    await ctx.exposeBinding('__upload', (_src, p, b64) => {
+      const body = Buffer.from(b64, 'base64');
+      if (body.length > 1048576) return 413;
+      uploads.set(p, { type: p.endsWith('.webp') ? 'image/webp' : 'image/jpeg', body, path: p });
+      return 200;
+    });
+    await ctx.addInitScript(() => {
+      const real = window.fetch;
+      window.fetch = async (input, init = {}) => {
+        const m = /\/storage\/v1\/object\/produtos\/([^?]+)/.exec(String(input?.url || input));
+        if (!m || (init.method || 'GET') !== 'POST') return real(input, init);
+        const blob = init.body instanceof Blob ? init.body : [...init.body.values()].find((v) => v instanceof Blob);
+        const bin = new Uint8Array(await blob.arrayBuffer());
+        let text = '';
+        for (let i = 0; i < bin.length; i += 32768) text += String.fromCharCode(...bin.subarray(i, i + 32768));
+        const status = await window.__upload(decodeURIComponent(m[1]), btoa(text));
+        const body = status === 200 ? { Key: `produtos/${m[1]}`, Id: m[1] } : { statusCode: '413', error: 'Payload too large', message: 'The object exceeded the maximum allowed size' };
+        return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      };
+    });
+  }
   await ctx.routeWebSocket(/supabase\.co/, () => { /* tempo real desligado no teste: não conecta em nada */ });
   await ctx.route('https://wa.me/**', (r) => r.fulfill({ contentType: 'text/html', body: '<p>whatsapp</p>' }));
   await ctx.route(/https:\/\/[^/]*supabase\.co\//, async (route) => {
@@ -228,7 +255,7 @@ export async function open(db, { device = 'Desktop', theme = 'dark', reduced = t
     const method = req.method();
     if (method === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
     const headers = req.headers();
-    const respond = (status, body) => route.fulfill({ status, headers: { ...cors, 'content-type': 'application/json' }, body: body === null ? '' : JSON.stringify(body) });
+    const respond = (status, body, extra = {}) => route.fulfill({ status, headers: { ...cors, 'content-type': 'application/json', ...extra }, body: body === null ? '' : JSON.stringify(body) });
     try {
       // autenticação
       if (url.pathname === '/auth/v1/token') {
@@ -264,7 +291,11 @@ export async function open(db, { device = 'Desktop', theme = 'dark', reduced = t
         const p = decodeURIComponent(url.pathname.split('/object/produtos/')[1]);
         const raw = req.postDataBuffer();
         // o supabase-js manda o arquivo em multipart: guarda só para servir de volta
-        uploads.set(p, { type: 'image/webp', body: extractMultipart(raw) });
+        const file = extractMultipart(raw);
+        // mesmas regras do bucket real: 1 MB e só estes tipos
+        const type = p.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+        if (file.length > 1048576) return respond(413, { statusCode: '413', error: 'Payload too large', message: 'The object exceeded the maximum allowed size' });
+        uploads.set(p, { type, body: file, path: p });
         return respond(200, { Key: `produtos/${p}`, Id: p });
       }
       // API
@@ -273,7 +304,7 @@ export async function open(db, { device = 'Desktop', theme = 'dark', reduced = t
         const fn = url.pathname.split('/rpc/')[1];
         const args = method === 'GET' ? {} : JSON.parse(req.postData() || '{}');
         const r = await restRpc(db, fn, args, auth);
-        return respond(r.status, r.body);
+        return respond(r.status, r.body, r.headers);
       }
       if (url.pathname.startsWith('/rest/v1/')) {
         const name = url.pathname.split('/rest/v1/')[1];
@@ -349,7 +380,7 @@ export async function audit(page, label, { mobile = false } = {}) {
     const issues = [];
     const vw = document.documentElement.clientWidth;
     if (document.documentElement.scrollWidth > vw + 1) {
-      const off = [...document.querySelectorAll('body *')].filter((el) => el.getBoundingClientRect().right > vw + 1 && !el.closest('.grid-matrix, .k-chips, .k-hl-row, .tabs, .k-gal-track, .table-wrap, dialog, .segmented')).slice(0, 3).map((el) => `${el.tagName}.${String(el.className).slice(0, 40)}`);
+      const off = [...document.querySelectorAll('body *')].filter((el) => el.getBoundingClientRect().right > vw + 1 && !el.closest('.grid-matrix, .k-chips, .k-cats, .k-hl-row, .tabs, .k-gal-track, .table-wrap, dialog, .segmented')).slice(0, 3).map((el) => `${el.tagName}.${String(el.className).slice(0, 40)}`);
       issues.push(`${label}: rolagem lateral (${document.documentElement.scrollWidth} > ${vw}) ${off.join(' | ')}`);
     }
     for (const d of document.querySelectorAll('dialog[open]')) {

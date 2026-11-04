@@ -19,7 +19,7 @@
 --      nunca lê tabela, nunca vê custo nem saldo exato;
 --    - quem não está em store_members não enxerga nenhuma linha.
 --
---  Versão do banco: 2 (whoami().schema_version). Subiu? Suba junto o
+--  Versão do banco: 3 (whoami().schema_version). Subiu? Suba junto o
 --  APP.schemaVersion em assets/js/config.js.
 -- =====================================================================
 
@@ -157,7 +157,7 @@ create trigger store_members_touch before update on public.store_members
 create table if not exists public.store_settings (
   id                      int primary key default 1 check (id = 1),
   store_name              text not null default 'Rota 44',
-  tagline                 text not null default 'Streetwear das ruas: rap, skate e trap.',
+  tagline                 text not null default 'Streetwear pra quem vive a rua.',
   whatsapp                text not null default '',
   instagram               text not null default '',
   tiktok                  text not null default '',
@@ -201,6 +201,11 @@ create table if not exists public.store_settings (
 );
 
 insert into public.store_settings (id) values (1) on conflict (id) do nothing;
+
+-- textos de fábrica que mudaram: só troca se a loja não tiver mexido neles
+update public.store_settings set tagline = 'Streetwear pra quem vive a rua.' where tagline = 'Streetwear das ruas: rap, skate e trap.';
+update public.store_settings set exchange_policy = replace(exchange_policy, ' Confirme as regras com o contador/advogado da loja.', '')
+ where exchange_policy like '%Confirme as regras com o contador/advogado da loja.%';
 
 drop trigger if exists store_settings_touch on public.store_settings;
 create trigger store_settings_touch before update on public.store_settings
@@ -1279,10 +1284,15 @@ declare
   v_cat    uuid := nullif(p ->> 'category_id', '')::uuid;
   v_can_cost boolean := public.can_see_cost();
   r        record;
+  v_base   text;
+  v_n      int;
 begin
   perform public.require_role('admin', 'gerente');
   if length(btrim(coalesce(p ->> 'name', ''))) = 0 then
     raise exception 'Informe o nome do produto.';
+  end if;
+  if jsonb_array_length(coalesce(p -> 'images', '[]'::jsonb)) > 4 then
+    raise exception 'Cada peça pode ter até 4 fotos.';
   end if;
   v_slug := nullif(public._slugify(coalesce(nullif(p ->> 'slug', ''), p ->> 'name')), '');
   if v_slug is null then v_slug := 'produto'; end if;
@@ -1372,7 +1382,14 @@ begin
     end if;
     v_sku := nullif(btrim(coalesce(it ->> 'sku', '')), '');
     if v_sku is null then
-      v_sku := 'R44-' || v_code || '-' || public._fit_code(v_prod.fit) || '-' || lpad(v_prod.seq::text, 3, '0') || '-' || v_ccode || '-' || v_size;
+      v_base := 'R44-' || v_code || '-' || public._fit_code(v_prod.fit) || '-' || lpad(v_prod.seq::text, 3, '0') || '-' || v_ccode || '-' || v_size;
+      v_sku := v_base;
+      -- trocou de grade: a variação antiga segue desativada com o mesmo código
+      v_n := 1;
+      while exists (select 1 from public.product_variants x where x.sku = v_sku and (v_vid is null or x.id <> v_vid)) loop
+        v_n := v_n + 1;
+        v_sku := v_base || '-' || v_n;
+      end loop;
     end if;
     v_bar := nullif(btrim(coalesce(it ->> 'barcode', '')), '');
 
@@ -1424,6 +1441,29 @@ begin
   end if;
 
   return jsonb_build_object('id', v_id, 'slug', v_slug);
+end;
+$$;
+
+/* Exclui a categoria. Peça que estava nela vai para a categoria escolhida. */
+create or replace function public.delete_category(p_id uuid, p_move_to uuid default null)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public.require_role('admin', 'gerente');
+  if exists (select 1 from public.categories where parent_id = p_id) then
+    raise exception 'Esta categoria tem subcategorias: mova ou exclua elas antes.';
+  end if;
+  if p_move_to = p_id then
+    raise exception 'Escolha outra categoria para as peças.';
+  end if;
+  if p_move_to is null and exists (select 1 from public.products where category_id = p_id and deleted_at is null) then
+    raise exception 'Escolha para qual categoria as peças vão.';
+  end if;
+  update public.products set category_id = p_move_to where category_id = p_id;
+  delete from public.categories where id = p_id;
 end;
 $$;
 
@@ -1798,6 +1838,7 @@ declare
   v_lim_qty  int;
   v_done     int;
   c          record;
+  v_req      text;
 begin
   perform public.require_role('admin', 'gerente', 'vendedor');
 
@@ -1811,6 +1852,13 @@ begin
 
   select * into s from public.store_settings where id = 1;
 
+  if nullif(p ->> 'request_id', '') is not null then
+    select status into v_req from public.catalog_requests where id = (p ->> 'request_id')::uuid for update;
+    if v_req = 'convertido' then
+      raise exception 'Este pedido do catálogo já virou venda.';
+    end if;
+  end if;
+
   if jsonb_typeof(v_items) <> 'array' or jsonb_array_length(v_items) = 0 then
     raise exception 'A venda precisa ter ao menos um item.';
   end if;
@@ -1819,6 +1867,7 @@ begin
   end if;
   if not public.has_role('admin', 'gerente') then
     v_seller := auth.uid();   -- vendedor só lança em nome dele
+    v_date := (now() at time zone 'America/Sao_Paulo')::date;   -- e só na data de hoje
   end if;
 
   -- venda com telefone e sem cadastro: acha o cliente, ou cria. O CRM enche sem ninguém digitar de novo
@@ -1918,6 +1967,8 @@ begin
 
   -- cupom
   if length(btrim(coalesce(p ->> 'coupon_code', ''))) > 0 then
+    -- duas vendas ao mesmo tempo não passam do limite de usos
+    perform 1 from public.coupons where code = upper(btrim(p ->> 'coupon_code')) for update;
     select d.coupon_id, d.discount into v_coupon, v_cdisc
       from public._coupon_discount(p ->> 'coupon_code', v_gross - v_idisc - v_sdisc, v_customer) d;
     insert into public.coupon_uses (coupon_id, sale_id, customer_id) values (v_coupon, v_sale.id, v_customer);
@@ -2082,6 +2133,9 @@ declare
   v_session uuid;
 begin
   select id into v_session from public.cash_sessions where opened_by = auth.uid() and closed_at is null;
+  if q.method = 'dinheiro' and v_session is null and (select require_cash_session from public.store_settings where id = 1) then
+    raise exception 'Abra o caixa antes de devolver dinheiro.';
+  end if;
   insert into public.sale_payments (sale_id, method, amount, installments, fee_amount, expected_on, paid_on, credit_id, cash_session_id, reverses_id, notes)
   values (q.sale_id, q.method, -q.amount, q.installments, -q.fee_amount, p_date, p_date, q.credit_id,
           case when q.method = 'dinheiro' then v_session end, q.id, left(p_note, 200));
@@ -2110,6 +2164,11 @@ begin
   end if;
   perform public._reverse_payment(q, coalesce(nullif(p ->> 'date', '')::date, (now() at time zone 'America/Sao_Paulo')::date),
                                   coalesce(nullif(p ->> 'reason', ''), 'Estorno'));
+  -- parcela do crediário paga por engano volta a ficar em aberto
+  update public.bills set status = 'aberta', paid_on = null, paid_method = null
+   where id = (select b.id from public.bills b
+                where b.sale_id = q.sale_id and b.kind = 'receber' and b.status = 'paga' and b.amount = q.amount and b.description = q.notes
+                order by b.installment_no desc nulls last limit 1);
 end;
 $$;
 
@@ -2178,6 +2237,8 @@ begin
             where status = 'aguardando_pagamento' and reserved_until is not null and reserved_until < now()
               and paid_total <= 0 order by id for update skip locked loop
     perform public._sale_stock(r.id, 'none', 'Reserva expirada da venda #' || r.number);
+    delete from public.coupon_uses where sale_id = r.id;
+    update public.bills set status = 'cancelada' where sale_id = r.id and status = 'aberta';
     update public.sales set status = 'cancelado', cancel_reason = 'Reserva expirada: pagamento não confirmado no prazo', canceled_at = now(), reserved_until = null
      where id = r.id;
     insert into public.sale_status_history (sale_id, from_status, to_status, note) values (r.id, r.status, 'cancelado', 'Reserva expirada');
@@ -2304,6 +2365,9 @@ begin
     update public.returns set credit_id = v_credit where id = v_ret.id;
   else
     select id into v_session from public.cash_sessions where opened_by = auth.uid() and closed_at is null;
+    if v_method = 'dinheiro' and v_session is null and s.require_cash_session then
+      raise exception 'Abra o caixa antes de devolver dinheiro.';
+    end if;
     insert into public.sale_payments (sale_id, method, amount, expected_on, paid_on, cash_session_id, notes)
     values (v.id, v_method, -v_value, v_date, v_date, case when v_method = 'dinheiro' then v_session end, 'Devolução #' || v_ret.number);
   end if;
@@ -2602,11 +2666,21 @@ declare
   s      public.store_settings;
   v_paid date := coalesce(nullif(p ->> 'paid_on', '')::date, (now() at time zone 'America/Sao_Paulo')::date);
   v_meth text := coalesce(nullif(p ->> 'method', ''), 'pix');
+  v      public.sales;
 begin
-  perform public.require_role('admin');
+  perform public.require_role('admin', 'gerente', 'vendedor');
   select * into b from public.bills where id = (p ->> 'bill_id')::uuid for update;
   if not found then
     raise exception 'Conta não encontrada.';
+  end if;
+  -- parcela de venda o balcão recebe; o resto do financeiro é só do admin
+  if not public.has_role('admin') then
+    if b.kind <> 'receber' or b.sale_id is null then
+      raise exception 'Seu perfil não tem permissão para isso. Peça a um gerente.' using errcode = '42501';
+    end if;
+    if not public.has_role('gerente') and not exists (select 1 from public.sales x where x.id = b.sale_id and x.seller_id = auth.uid()) then
+      raise exception 'Conta não encontrada.';
+    end if;
   end if;
   if b.status <> 'aberta' then
     raise exception 'Esta conta já foi baixada ou cancelada.';
@@ -2616,6 +2690,12 @@ begin
     select * into s from public.store_settings where id = 1;
     perform public._add_payment(b.sale_id, jsonb_build_object('method', v_meth, 'amount', b.amount,
       'notes', coalesce(b.description, '')), s, v_paid);
+    select * into v from public.sales where id = b.sale_id for update;
+    if v.status = 'aguardando_pagamento' and v.balance <= 0.005 then
+      perform public._sale_stock(v.id, 'out', 'Venda #' || v.number);
+      update public.sales set status = 'pago', reserved_until = null where id = v.id;
+      insert into public.sale_status_history (sale_id, from_status, to_status, note) values (v.id, 'aguardando_pagamento', 'pago', 'Parcelas pagas');
+    end if;
   end if;
   if b.recurring = 'mensal' then
     insert into public.bills (kind, description, category_id, supplier_id, due_date, amount, recurring, notes)
@@ -2795,8 +2875,15 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_phone text;
 begin
   perform public.require_role('admin', 'gerente');
+  select phone into v_phone from public.customers where id = p_id;
+  if length(coalesce(v_phone, '')) >= 10 then
+    update public.catalog_requests set customer_name = 'Cliente removido', customer_phone = null, notes = null where customer_phone = v_phone;
+    delete from public.stock_alerts where phone = v_phone;
+  end if;
   update public.customers set name = 'Cliente removido', phone = '', cpf = '', email = '', instagram = '', birthday = null, cep = '', address = '', city = '',
     size_top = '', size_bottom = '', size_shoes = '', notes = '', marketing_consent = false, deleted_at = now()
    where id = p_id;
@@ -2915,7 +3002,7 @@ as $$
     'discount_limit', public._my_discount_limit(),
     'has_pin', exists (select 1 from public.member_secrets where user_id = auth.uid()),
     -- O app confere: banco mais antigo que o app = tela "rode o schema.sql".
-    'schema_version', 2
+    'schema_version', 3
   );
 $$;
 
@@ -2957,6 +3044,8 @@ declare
   v_now timestamptz := now();
   v_store jsonb;
 begin
+  -- estoque e preço mudam a toda hora: o Safari não pode reaproveitar a resposta antiga
+  perform set_config('response.headers', '[{"Cache-Control": "no-store"}]', true);
   select * into s from public.store_settings where id = 1;
   v_store := jsonb_build_object(
     'store_name', s.store_name, 'tagline', s.tagline, 'whatsapp', s.whatsapp, 'instagram', s.instagram, 'tiktok', s.tiktok,
@@ -3314,6 +3403,8 @@ begin
 
   -- financeiro: só admin
   perform public._policy('bills', 'admin_tudo', 'all', adm);
+  perform public._policy('bills', 'vendas_le_parcelas', 'select',
+    'kind = ''receber'' and sale_id is not null and (select public.has_role(''gerente'', ''vendedor'')) and exists (select 1 from public.sales v where v.id = sale_id)');
   grant select, insert, update, delete on public.bills to authenticated;
   perform public._policy('finance_categories', 'admin_tudo', 'all', adm);
   grant select, insert, update, delete on public.finance_categories to authenticated;
@@ -3393,6 +3484,7 @@ grant execute on function public.whoami() to authenticated;
 grant execute on function public.adjust_stock(jsonb) to authenticated;
 grant execute on function public.save_product(jsonb) to authenticated;
 grant execute on function public.delete_product(uuid) to authenticated;
+grant execute on function public.delete_category(uuid, uuid) to authenticated;
 grant execute on function public.set_prices(jsonb) to authenticated;
 grant execute on function public.check_manager_pin(text, numeric) to authenticated;
 grant execute on function public.set_my_pin(text) to authenticated;

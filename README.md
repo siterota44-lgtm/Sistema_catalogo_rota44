@@ -102,7 +102,7 @@ Editor rode `schema.sql` → `2_login.sql` → `1_dados.sql`. **Cuidado:** o `1_
 | **Catálogo online** | Abrir/fechar, link, QR code, textos e regras da vitrine |
 | **Ajustes** | Dados da loja, taxas, equipe, senha de liberação, backup, auditoria, diagnóstico |
 
-**Catálogo público:** um app de uma tela, como o da Sua Sesh: marca compacta, busca e categorias sempre à mão, peças em destaque
+**Catálogo público:** um app de uma tela, como o da Sua Sesh: marca compacta, categorias com foto (como na i7even), busca sempre à mão, peças em destaque
 de cara, prateleiras por categoria e sacola fixa embaixo. Drops com contagem regressiva, filtros (tamanho, cor, preço, modelagem...),
 busca que tolera erro de digitação, ficha com galeria por cor e tamanho esgotado riscado, tabela de medidas, "avise-me", cupom e pedido
 no WhatsApp. Abre no escuro, com botão para o claro. Links diretos: `#p=peça`, `#c=categoria`, `#d=drop`.
@@ -141,6 +141,8 @@ cd tests && npm install
 npm run test:db                         # schema.sql num Postgres de verdade: permissões e cada regra
 npm run test:unit                       # fórmulas e código de barras
 npm run test:e2e                        # roteiro completo no Chrome, com o banco imitado (nada vai para o Supabase real)
+npm run test:iphone                     # motor do Safari com tela de iPhone: fotos grandes, 4 fotos por peça, pedido no WhatsApp
+                                        # (uma vez antes: npx playwright-core install webkit; E2E_ENGINE=webkit roda o test:e2e nele)
 npm run test:security                   # ataque sem login contra o banco real
 ```
 

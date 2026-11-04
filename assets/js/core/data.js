@@ -107,7 +107,7 @@ const LOADERS = {
   cash_movements: { order: 'created_at', roles: SELLERS },
   purchases: { order: 'created_at', desc: true, roles: STOCK },
   purchase_items: { roles: STOCK },
-  bills: { order: 'due_date', roles: ['admin'] },
+  bills: { order: 'due_date', roles: ['admin', 'gerente', 'vendedor'] },
   finance_categories: { order: 'name', roles: ['admin'] },
   returns: { order: 'created_at', desc: true, roles: MANAGERS },
   return_items: { roles: MANAGERS },
@@ -438,6 +438,11 @@ export async function saveRow(name, row, keyCol = 'id') {
   await reload(name);
   return res.data;
 }
+export async function deleteCategory(id, moveTo = null) {
+  await rpc('delete_category', { p_id: id, p_move_to: moveTo });
+  await reload('categories', 'products');
+}
+
 export async function deleteRow(name, id, keyCol = 'id') {
   const { error } = await table(name).delete().eq(keyCol, id);
   if (error) throw error;
@@ -657,8 +662,15 @@ export function backupSnapshot() {
 
 const PHOTO_PX = 1600;
 
+// o Safari não gera WebP (devolve PNG, que é lento e pesado): descobre uma vez só
+const OUT_TYPE = (() => {
+  try { return document.createElement('canvas').toDataURL('image/webp').startsWith('data:image/webp') ? 'image/webp' : 'image/jpeg'; }
+  catch { return 'image/jpeg'; }
+})();
+
 async function decode(file) {
-  try { return await createImageBitmap(file); } catch {
+  // from-image: foto do iPhone em pé não pode virar foto deitada
+  try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch {
     const url = URL.createObjectURL(file);
     try {
       return await new Promise((res, rej) => {
@@ -688,16 +700,24 @@ async function compress(img, max, maxBytes) {
   g.fillRect(0, 0, c.width, c.height);
   g.drawImage(img, 0, 0, c.width, c.height);
   for (const q of [0.86, 0.76, 0.64, 0.5]) {
-    // o Safari não gera WebP: devolve PNG. Aí vai JPEG. Extensão segue o que saiu.
-    let blob = await canvasBlob(c, 'image/webp', q);
-    if (!blob || blob.type !== 'image/webp') blob = await canvasBlob(c, 'image/jpeg', q);
-    if (blob.size <= maxBytes) return blob;
+    const blob = await canvasBlob(c, OUT_TYPE, q);
+    if (blob && blob.size <= maxBytes) return blob;
   }
-  return canvasBlob(c, 'image/jpeg', 0.42);
+  const last = await canvasBlob(c, 'image/jpeg', 0.42);
+  if (!last) throw new Error('Não consegui processar essa foto. Tente uma menor.');
+  return last;
 }
 
 export async function uploadImage(file) {
   const img = await decode(file);
+  try {
+    return await sendImage(img);
+  } finally {
+    img.close?.();   // celular: libera a memória antes da próxima foto
+  }
+}
+
+async function sendImage(img) {
   const blob = await compress(img, PHOTO_PX, 950000);
   const ext = blob.type === 'image/webp' ? 'webp' : 'jpg';
   const path = `p/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.${ext}`;

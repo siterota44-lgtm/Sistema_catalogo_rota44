@@ -8,7 +8,8 @@
     "test:unit": "node --test \"unit/*.test.mjs\"",
     "test:db": "node db/schema.test.mjs",
     "test:security": "node security/live.test.mjs",
-    "test:e2e": "node e2e/run.mjs"
+    "test:e2e": "node e2e/run.mjs",
+    "test:iphone": "node e2e/iphone.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.11",

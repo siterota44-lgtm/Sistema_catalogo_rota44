@@ -21,6 +21,7 @@ export function mount(host) {
       { ok: !noPhoto, text: noPhoto ? `${noPhoto} produto${noPhoto === 1 ? '' : 's'} sem foto` : 'Todos os produtos têm foto' },
       { ok: !noStock, text: noStock ? `${noStock} produto${noStock === 1 ? '' : 's'} sem estoque (aparecem como esgotados)` : 'Todos os produtos têm estoque' },
       { ok: !!s.instagram, text: s.instagram ? 'Instagram preenchido' : 'Falta o Instagram da loja' },
+      { ok: !!s.address, text: s.address ? 'Endereço preenchido' : 'Falta o endereço: ele aparece no rodapé do catálogo' },
     ];
     return `<ul class="col gap-2 small">${items.map((i) => `<li class="row gap-2"><span class="${i.ok ? 'tone-ok' : 'warn-note'}" style="display:inline-flex">${icon(i.ok ? 'checkCircle' : 'alert')}</span>${esc(i.text)}</li>`).join('')}</ul>`;
   }
@@ -58,7 +59,7 @@ export function mount(host) {
           <div class="fieldset">
             <div class="fieldset-title">Topo do catálogo</div>
             <div class="form-grid">
-              ${field('Frase embaixo do nome', `<input class="input" name="tagline" value="${esc(s.tagline)}" placeholder="Streetwear das ruas: rap, skate e trap.">`, 6)}
+              ${field('Frase embaixo do nome', `<input class="input" name="tagline" value="${esc(s.tagline)}" placeholder="Streetwear pra quem vive a rua.">`, 6)}
               ${field('Aviso na faixa vermelha', `<input class="input" name="announcement" value="${esc(s.announcement)}" placeholder="Frete grátis acima de R$ 299 · 5% no Pix">`, 6)}
             </div>
             <p class="xs dim">Para escolher o que vai nos Destaques: em Produtos, abra a peça e marque "Destaque no topo do catálogo".</p>
@@ -76,13 +77,14 @@ export function mount(host) {
             </div>
           </div>
           <div class="fieldset">
-            <div class="fieldset-title">Páginas da loja</div>
+            <div class="fieldset-title">Textos da loja</div>
             <div class="form-grid">
-              ${field('Sobre a loja', `<textarea class="textarea" name="about" rows="3">${esc(s.about)}</textarea>`, 12)}
-              ${field('Trocas e devoluções', `<textarea class="textarea" name="exchange_policy" rows="3">${esc(s.exchange_policy)}</textarea>`, 12)}
-              ${field('Frete e entrega', `<textarea class="textarea" name="shipping_info" rows="2">${esc(s.shipping_info)}</textarea>`, 12)}
-              ${field('Política de privacidade', `<textarea class="textarea" name="privacy_policy" rows="3">${esc(s.privacy_policy)}</textarea>`, 12)}
+              ${field('Sobre a loja', `<textarea class="textarea" name="about" rows="3">${esc(s.about)}</textarea>`, 12, 'Aparece no rodapé do catálogo.')}
+              ${field('Frete e entrega', `<textarea class="textarea" name="shipping_info" rows="2">${esc(s.shipping_info)}</textarea>`, 12, 'Aparece no rodapé do catálogo.')}
+              ${field('Trocas e devoluções', `<textarea class="textarea" name="exchange_policy" rows="3">${esc(s.exchange_policy)}</textarea>`, 12, 'Aparece na ficha de cada peça.')}
+              ${field('Política de privacidade', `<textarea class="textarea" name="privacy_policy" rows="3">${esc(s.privacy_policy)}</textarea>`, 12, 'Abre pelo link na sacola.')}
             </div>
+            <p class="xs dim">WhatsApp, Instagram, TikTok, e-mail, endereço e horário ficam em Ajustes → Loja. O que estiver preenchido aparece no rodapé.</p>
           </div>
           <div class="row" style="justify-content:flex-end"><button type="button" class="btn btn-primary" data-save>Salvar catálogo</button></div>
         </form>

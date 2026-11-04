@@ -76,7 +76,7 @@ export function mount(host, ctx) {
     const back = Data.stockAlerts().filter((a) => !a.notified_at && Data.variant(a.variant_id)?.available > 0).length;
     if (back) out.push({ icon: 'phone', text: `${back} cliente${back === 1 ? '' : 's'} esperando aviso: a peça chegou`, route: 'pedidos' });
     const limit = todayISO(addDays(new Date(), 3));
-    const due = Data.bills().filter((b) => b.status === 'aberta' && b.due_date <= limit);
+    const due = Data.hasRole('admin') ? Data.bills().filter((b) => b.status === 'aberta' && b.due_date <= limit) : [];
     if (due.length) out.push({ icon: 'receipt', text: `${due.length} conta${due.length === 1 ? '' : 's'} vencendo ou vencida${due.length === 1 ? '' : 's'}`, route: 'financeiro' });
     if (seesSales && !Data.myOpenCash()) out.push({ icon: 'wallet', text: 'Seu caixa está fechado', route: 'caixa', quiet: true });
     return out;

@@ -12,7 +12,7 @@ await p.setContent(`<!doctype html><style>
   @font-face { font-family: 'B'; src: url(data:font/woff2;base64,${font}); }
   body { margin:0; width:1200px; height:630px; background:#0b0b0c; position:relative; overflow:hidden; font-family:'B'; color:#fff; }
   .w { position:absolute; inset:0; background:url(data:image/webp;base64,${b64('grafite-escuro.webp')}) 0 0/900px; opacity:.6; }
-  .s { position:absolute; left:70px; top:90px; width:380px; filter:drop-shadow(0 16px 40px rgba(0,0,0,.7)); transform:rotate(-3deg); }
+  .s { position:absolute; left:70px; top:90px; width:380px; filter:drop-shadow(0 16px 40px rgba(0,0,0,.7)); }
   .t { position:absolute; left:500px; top:170px; }
   h1 { margin:0; font-size:150px; line-height:.9; font-weight:400; text-shadow:5px 5px 0 #e00000; }
   p { margin:22px 0 0; font-size:44px; letter-spacing:.04em; color:#eee; }

@@ -121,7 +121,7 @@ on conflict (name) do nothing;
 
 update public.store_settings set
   exchange_policy = case when exchange_policy = '' then
-    'Trocas em até 30 dias com a peça sem uso, etiqueta e nota. Compras feitas fora da loja física podem ser devolvidas em até 7 dias corridos (direito de arrependimento, Código de Defesa do Consumidor). Confirme as regras com o contador/advogado da loja.'
+    'Trocas em até 30 dias com a peça sem uso, etiqueta e nota. Compras feitas fora da loja física podem ser devolvidas em até 7 dias corridos (direito de arrependimento, Código de Defesa do Consumidor).'
     else exchange_policy end,
   shipping_info = case when shipping_info = '' then
     'Retirada na loja, motoboy na região ou envio pelos Correios. O valor do frete é combinado no WhatsApp.'

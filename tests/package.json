@@ -9,7 +9,9 @@
     "test:db": "node db/schema.test.mjs",
     "test:security": "node security/live.test.mjs",
     "test:e2e": "node e2e/run.mjs",
-    "test:iphone": "node e2e/iphone.mjs"
+    "test:iphone": "node e2e/iphone.mjs",
+    "test:balcao": "node e2e/balcao.mjs",
+    "test:vendedor": "node e2e/vendedor.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.11",

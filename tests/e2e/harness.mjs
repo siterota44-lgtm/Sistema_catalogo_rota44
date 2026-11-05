@@ -215,9 +215,9 @@ export const uploads = new Map();
  * Abre um contexto de navegador ligado ao banco.
  * @param {{ device?: string|object, theme?: 'light'|'dark' }} opts
  */
-export async function open(db, { device = 'Desktop', theme = 'dark', reduced = true } = {}) {
+export async function open(db, { device = 'Desktop', theme = 'dark', reduced = true, args = [] } = {}) {
   // E2E_ENGINE=webkit: o mesmo teste no motor do Safari do iPhone
-  const browser = process.env.E2E_ENGINE === 'webkit' ? await webkit.launch() : await chromium.launch({ executablePath: CHROME });
+  const browser = process.env.E2E_ENGINE === 'webkit' ? await webkit.launch() : await chromium.launch({ executablePath: CHROME, args });
   const base = typeof device === 'object' ? device : device === 'Desktop' ? { viewport: { width: 1366, height: 860 } } : devices[device];
   const ctx = await browser.newContext({ ...base, colorScheme: theme, reducedMotion: reduced ? 'reduce' : 'no-preference' });
   const errors = [];

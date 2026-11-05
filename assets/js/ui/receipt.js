@@ -6,6 +6,8 @@ import { PAYMENT_METHODS, SALE_STATUS, CHANNELS } from '../core/constants.js';
 import { openModal, toast } from './kit.js';
 import { icon } from './icons.js';
 import { printHTML, code } from './common.js';
+import { saleDoc } from '../docs/order-doc.js';
+import { openOrderPdf } from './doc-preview.js';
 
 export function receiptHTML(sale) {
   const s = Data.settings();
@@ -49,7 +51,7 @@ export function receiptMessage(sale) {
   const s = Data.settings();
   const items = Data.saleItems(sale.id);
   const lines = [
-    `*${s.store_name || 'Rota 44'}* - venda ${code(sale.number)}`,
+    `*Seu pedido - ${s.store_name || 'Rota 44'}*`,
     '',
     ...items.map((i) => `• ${i.qty}× ${i.product_name} (${i.color_name} ${i.size_label}): ${money(i.total)}`),
     '',
@@ -75,10 +77,12 @@ export function openReceipt(saleId) {
     body: receiptHTML(sale),
     footer: `
       ${wa ? `<a class="btn" href="${esc(wa)}" target="_blank" rel="noopener">${icon('whatsapp')} WhatsApp</a>` : `<button class="btn" data-copy>${icon('copy')} Copiar texto</button>`}
+      <button class="btn" data-pdf>${icon('download')} PDF</button>
       <button class="btn" data-print>${icon('print')} Imprimir</button>
       <button class="btn btn-primary" data-close>Pronto</button>`,
   });
-  m.foot.querySelector('[data-print]').addEventListener('click', () => printHTML(receiptHTML(sale), 'printing-receipt'));
+  m.foot.querySelector('[data-print]').addEventListener('click', () => printHTML(receiptHTML(sale), 'printing-receipt', 'margin: 2mm'));
+  m.foot.querySelector('[data-pdf]').addEventListener('click', () => openOrderPdf(saleDoc(sale.id)));
   m.foot.querySelector('[data-copy]')?.addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(receiptMessage(sale)); toast('Texto copiado'); }
     catch { toast('Não consegui copiar', { kind: 'warn' }); }

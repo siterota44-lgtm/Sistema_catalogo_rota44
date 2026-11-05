@@ -1,7 +1,7 @@
 /**
  * Etiquetas: nome curto, cor, tamanho, preço, SKU e código de barras (Code 128).
- * Folha padrão 50×30 mm; a impressora térmica (Zebra, Elgin, Argox) imprime pelo
- * navegador. Em promoção, mostra o "de / por".
+ * Rolo térmico (Zebra, Elgin, Argox): uma etiqueta por página, do tamanho exato do
+ * papel. Folha A4: várias por página. Em promoção, mostra o "de / por".
  */
 
 import * as Data from '../core/data.js';
@@ -10,6 +10,18 @@ import { code128SVG } from '../core/barcode.js';
 import { icon } from './icons.js';
 import { toast, openModal } from './kit.js';
 import { $, $$, head, categoryOptions, matches, printHTML, dot, emptyBox } from './common.js';
+
+const FORMAT_KEY = 'rota44.labelFormat';
+const FORMATS = {
+  '50x30': { name: 'Rolo 50×30 mm', roll: true, page: 'size: 50mm 30mm; margin: 0', tip: 'Na impressora: papel 50×30 mm, margens "Nenhuma" e escala 100%.' },
+  '40x25': { name: 'Rolo 40×25 mm', roll: true, page: 'size: 40mm 25mm; margin: 0', tip: 'Na impressora: papel 40×25 mm, margens "Nenhuma" e escala 100%.' },
+  '60x40': { name: 'Rolo 60×40 mm', roll: true, page: 'size: 60mm 40mm; margin: 0', tip: 'Na impressora: papel 60×40 mm, margens "Nenhuma" e escala 100%.' },
+  a4: { name: 'Folha A4 (etiquetas de 50×30 mm)', roll: false, page: 'size: A4; margin: 6mm', tip: 'Na impressora: papel A4 e escala 100%.' },
+};
+function savedFormat() {
+  try { const f = localStorage.getItem(FORMAT_KEY); if (FORMATS[f]) return f; } catch { /* modo privado */ }
+  return '50x30';
+}
 
 function labelHTML(v) {
   const p = Data.product(v.product_id);
@@ -20,33 +32,46 @@ function labelHTML(v) {
       <div class="lt-row"><span>${esc(Data.color(v.color_id)?.name)} · <b>${esc(Data.size(v.size_id)?.label)}</b></span>
         <span>${pr.onSale ? `<span class="lt-old">${esc(money(pr.list))}</span>` : ''}<span class="lt-price">${esc(money(pr.price))}</span></span></div>
       ${code128SVG(v.barcode)}
-      <div class="lt-code">${esc(v.barcode)} · ${esc(v.sku)}</div>
+      <div class="lt-code">${esc(v.barcode)}<span class="lt-sku"> · ${esc(v.sku)}</span></div>
     </div>`;
 }
 
-function sheetHTML(picked) {
+function sheetHTML(picked, format) {
   const tags = [];
   for (const { variant_id, qty } of picked) {
     const v = Data.variant(variant_id);
     if (!v) continue;
     for (let i = 0; i < qty; i++) tags.push(labelHTML(v));
   }
-  return `<div class="label-sheet">${tags.join('')}</div>`;
+  return `<div class="label-sheet fmt-${format} ${FORMATS[format].roll ? 'is-roll' : ''}">${tags.join('')}</div>`;
 }
 
 export function openLabels(picked) {
   const list = picked.filter((x) => x.qty > 0);
   if (!list.length) { toast('Nada para imprimir', { kind: 'warn' }); return; }
   const total = list.reduce((a, x) => a + x.qty, 0);
-  const preview = sheetHTML(list.map((x) => ({ ...x, qty: Math.min(x.qty, 2) })).slice(0, 12));
+  let format = savedFormat();
+  const preview = () => sheetHTML(list.map((x) => ({ ...x, qty: Math.min(x.qty, 2) })).slice(0, 12), format);
   const m = openModal({
     title: `${total} etiqueta${total === 1 ? '' : 's'}`,
-    subtitle: 'Prévia. Na impressora, escolha o papel de 50×30 mm.',
+    subtitle: 'Prévia das etiquetas',
     size: 'lg',
-    body: preview,
+    body: `
+      <div class="field" style="max-width:320px;margin-bottom:6px">
+        <label class="label" for="label-format">Papel</label>
+        <select class="select" id="label-format" data-format>${Object.entries(FORMATS).map(([k, f]) => `<option value="${k}"${k === format ? ' selected' : ''}>${esc(f.name)}</option>`).join('')}</select>
+      </div>
+      <p class="xs dim" data-tip style="margin-bottom:12px">${esc(FORMATS[format].tip)}</p>
+      <div data-preview>${preview()}</div>`,
     footer: `<button class="btn" data-close>Fechar</button><button class="btn btn-primary" data-print>${icon('print')} Imprimir</button>`,
   });
-  m.foot.querySelector('[data-print]').addEventListener('click', () => printHTML(sheetHTML(list), 'printing-labels'));
+  m.panel.querySelector('[data-format]').addEventListener('change', (e) => {
+    format = e.target.value;
+    try { localStorage.setItem(FORMAT_KEY, format); } catch { /* modo privado */ }
+    m.panel.querySelector('[data-preview]').innerHTML = preview();
+    m.panel.querySelector('[data-tip]').textContent = FORMATS[format].tip;
+  });
+  m.foot.querySelector('[data-print]').addEventListener('click', () => printHTML(sheetHTML(list, format), 'printing-labels', FORMATS[format].page));
 }
 
 export function mount(host) {

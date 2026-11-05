@@ -214,6 +214,7 @@ await tab.waitForURL(/wa\.me/, { timeout: 15000 }).catch(() => {});
 await c.waitForSelector('.k-sheet-head h2:has-text("Pedido enviado")');
 ok(tab.url().includes('wa.me/5544999990000'), 'abre o WhatsApp da loja sem o Safari bloquear');
 ok(decodeURIComponent(tab.url()).includes('Camiseta Quatro Fotos'), 'com a peça na mensagem');
+ok(!/\bC\d+\b|R44-/.test(decodeURIComponent(tab.url())), 'mensagem sem código interno');
 ok((await q(db, `select id from public.catalog_requests`)).length === 1, 'e o pedido entra no sistema');
 
 ok(X.errors.length === 0, 'sem erro de JS no Safari', X.errors.join(' | '));

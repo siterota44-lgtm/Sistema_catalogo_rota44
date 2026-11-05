@@ -879,7 +879,7 @@ function openBag() {
   }
 
   function message(res, form, lines) {
-    const out = [`*Pedido${res?.number ? ` C${res.number}` : ''} - ${s.store_name || 'Rota 44'}*`, '', `Nome: ${form.name}`, ''];
+    const out = [`*Pedido - ${s.store_name || 'Rota 44'}*`, '', `Nome: ${form.name}`, ''];
     const items = res?.items || lines.map((l) => ({ name: l.v.product.name, color: idx.colors.get(l.v.color_id)?.name, size: idx.sizes.get(l.v.size_id)?.label, qty: l.qty, unit_price: l.v.price, available: l.v.available }));
     for (const i of items) out.push(`• ${i.qty}× ${i.name} (${i.color}, ${i.size}): ${money(i.qty * i.unit_price)}${i.available === false ? ' ⚠ esgotou agora, confirmar' : ''}`);
     out.push('');

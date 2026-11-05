@@ -421,13 +421,15 @@ function openCount(inventoryId, done) {
     persist();
     toast(`${Data.variantTitle(v)}: ${draft[v.id]}`, { duration: 1200 });
     drawList();
+    return `${Data.variantTitle(v)}: ${draft[v.id]}`;
   };
   m.panel.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.target.matches('[data-q]')) {
       e.preventDefault();
       e.stopPropagation();
       const code = e.target.value.trim();
-      if (Data.findByCode(code)) { bump(code); e.target.value = ''; filter = ''; drawList(); }
+      // código que não existe também sai do campo: o próximo bipe colaria nele
+      if (Data.findByCode(code) || /^\d{6,}$/.test(code)) { bump(code); e.target.value = ''; filter = ''; drawList(); }
     }
   });
 

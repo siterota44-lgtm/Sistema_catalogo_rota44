@@ -9,6 +9,8 @@ import { toast, toastError, openModal, withLoading } from './kit.js';
 import { $, $$, moneyHTML, badge, table, paged, matches, options, optionsMap, field, moneyInput, code, exportCSV, head } from './common.js';
 import { openReceipt, receiptMessage } from './receipt.js';
 import { openReturnForm } from './returns.js';
+import { saleDoc } from '../docs/order-doc.js';
+import { openOrderPdf } from './doc-preview.js';
 import { round2 } from '../core/calc.js';
 
 export const statusBadge = (s) => badge(SALE_STATUS[s]?.label || s, SALE_STATUS[s]?.tone);
@@ -242,6 +244,7 @@ export function openSale(id) {
     const wa = whatsappLink(s.customer_phone, receiptMessage(s));
     foot.innerHTML = `
       ${!canceled && Number(s.balance) > 0.005 && !hasOpenParcel ? `<button class="btn btn-primary" data-pay>${icon('cash')} Receber</button>` : ''}
+      ${!canceled ? `<button class="btn" data-pdf>${icon('download')} PDF</button>` : ''}
       <button class="btn" data-receipt>${icon('print')} Comprovante</button>
       ${wa ? `<a class="btn" href="${esc(wa)}" target="_blank" rel="noopener">${icon('whatsapp')} WhatsApp</a>` : ''}
       ${!canceled && s.status !== 'aguardando_pagamento' ? `<button class="btn" data-tracking>${icon('truck')} Rastreio</button>` : ''}
@@ -260,6 +263,7 @@ export function openSale(id) {
       return;
     }
     if (e.target.closest('[data-receipt]')) { openReceipt(id); return; }
+    if (e.target.closest('[data-pdf]')) { openOrderPdf(saleDoc(id)); return; }
     if (e.target.closest('[data-pay]')) { openPayment(id, draw); return; }
     const bill = e.target.closest('[data-bill]');
     if (bill) { openParcel(Data.bills().find((b) => b.id === bill.dataset.bill), draw); return; }

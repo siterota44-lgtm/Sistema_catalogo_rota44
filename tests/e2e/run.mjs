@@ -522,6 +522,7 @@ await c.waitForSelector('.k-sheet-head h2:has-text("Pedido enviado")');
 await wa.waitForURL(/wa\.me/, { timeout: 15000 }).catch(() => {});
 const waUrl = decodeURIComponent(wa.url());
 ok(waUrl.includes('wa.me/5544999990000'), 'abriu o WhatsApp da loja');
+ok(!/\bC\d+\b|R44-/.test(waUrl), 'mensagem sem código interno');
 ok(waUrl.includes('Sabota Teste') && waUrl.includes('Moletom Canguru Heavy') && /Total: R\$/.test(waUrl), 'mensagem com nome, peça e total');
 const req = await one(`select * from public.catalog_requests order by number desc limit 1`);
 ok(req.customer_name === 'Sabota Teste' && req.coupon_code === 'ROTA10', 'pedido registrado no sistema');

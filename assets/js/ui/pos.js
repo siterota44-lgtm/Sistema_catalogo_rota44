@@ -654,9 +654,41 @@ export function mount(host) {
       renderGrid();
       return;
     }
+    // o leitor é mais rápido que a busca: confere o que está escrito agora
+    query = scan.value;
+    const typed = scan.value.trim();
+    // código que não existe não fica no campo: o próximo bipe colaria nele
+    if (/^\d{6,}$/.test(typed)) {
+      toast('Código não encontrado', { kind: 'warn', text: typed });
+      scan.value = '';
+      query = '';
+      renderGrid();
+      return;
+    }
     const list = rankedProducts();
     if (list.length === 1) { openVariantPicker(list[0]); }
   });
+
+  // Leitor USB funciona como teclado muito rápido. Se o foco saiu do campo (tocou num
+  // botão, fechou uma janela), o bipe ainda entra: o que chega em rajada é código.
+  let burst = '';
+  let burstAt = 0;
+  const onGlobalKey = (e) => {
+    if (!scan.isConnected) { document.removeEventListener('keydown', onGlobalKey); return; }
+    if (document.querySelector('dialog[open]') || e.target.closest?.('input, textarea, select, [contenteditable]')) { burst = ''; return; }
+    if (e.timeStamp - burstAt > 80) burst = '';
+    burstAt = e.timeStamp;
+    if (e.key === 'Enter') {
+      if (burst.length >= 4) {
+        e.preventDefault();
+        if (!handleCode(burst)) toast('Código não encontrado', { kind: 'warn', text: burst });
+      }
+      burst = '';
+    } else if (e.key.length === 1) {
+      burst += e.key;
+    }
+  };
+  document.addEventListener('keydown', onGlobalKey);
   scan.addEventListener('input', debounce(() => { query = scan.value; limit = 60; renderGrid(); }, 120));
 
   host.addEventListener('change', (e) => {
@@ -668,7 +700,15 @@ export function mount(host) {
     if (card) { openVariantPicker(Data.product(card.dataset.product)); return; }
     if (e.target.closest('[data-more]')) { limit += 60; renderGrid(); return; }
     if (e.target.closest('[data-camera]')) {
-      openScanner({ onCode: (c) => { if (!handleCode(c)) toast('Código não encontrado', { kind: 'warn', text: c }); } });
+      // fica aberta para bipar várias peças de uma vez
+      openScanner({
+        keepOpen: true,
+        onCode: (c) => {
+          const v = Data.findByCode(c);
+          if (!v) { toast('Código não encontrado', { kind: 'warn', text: c }); return `Não achei: ${c}`; }
+          return addVariant(v) ? `Adicionada: ${Data.variantTitle(v)}` : `Sem estoque: ${Data.variantTitle(v)}`;
+        },
+      });
       return;
     }
     const line = e.target.closest('[data-line]');

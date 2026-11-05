@@ -298,9 +298,11 @@ table.data tbody tr[data-open] { cursor: pointer; }
 
 /* ------------------------------------------------------------- etiquetas */
 
-.label-sheet { display: grid; grid-template-columns: repeat(auto-fill, 50mm); gap: 2mm; justify-content: start; }
+.label-sheet { --lw: 50mm; --lh: 30mm; display: grid; grid-template-columns: repeat(auto-fill, var(--lw)); gap: 2mm; justify-content: start; }
+.label-sheet.fmt-40x25 { --lw: 40mm; --lh: 25mm; }
+.label-sheet.fmt-60x40 { --lw: 60mm; --lh: 40mm; }
 .label-tag {
-  width: 50mm; height: 30mm; padding: 1.5mm 2mm;
+  width: var(--lw); height: var(--lh); padding: 1.5mm 2mm;
   background: #fff; color: #000;
   border: 1px dashed #bbb;
   display: flex; flex-direction: column; justify-content: space-between;
@@ -312,12 +314,24 @@ table.data tbody tr[data-open] { cursor: pointer; }
 .label-tag .lt-price { font-family: var(--font-display); font-size: 14pt; line-height: 1; }
 .label-tag .lt-old { text-decoration: line-through; font-size: 8pt; margin-right: 3px; }
 .label-tag svg { width: 100%; height: 9mm; display: block; }
-.label-tag .lt-code { font-size: 7pt; text-align: center; letter-spacing: .04em; line-height: 1; }
+.label-tag .lt-code { font-size: 7pt; text-align: center; letter-spacing: .04em; line-height: 1; white-space: nowrap; overflow: hidden; }
+.fmt-40x25 .lt-name { font-size: 8pt; max-height: 1.05em; }
+.fmt-40x25 .lt-row { font-size: 7.5pt; }
+.fmt-40x25 .lt-price { font-size: 11pt; }
+.fmt-40x25 .lt-old, .fmt-40x25 .lt-sku { display: none; }
+.fmt-40x25 svg { height: 8mm; }
+.fmt-60x40 .lt-name { font-size: 11.5pt; }
+.fmt-60x40 .lt-row { font-size: 10.5pt; }
+.fmt-60x40 .lt-price { font-size: 18pt; }
+.fmt-60x40 svg { height: 14mm; }
+.fmt-60x40 .lt-code { font-size: 8pt; }
 @media print {
   body.printing-labels > *:not(#print-root) { display: none !important; }
   #print-root { display: block !important; }
   .label-tag { border: 0; }
-  @page { margin: 4mm; }
+  .label-sheet.is-roll { display: block; }
+  .label-sheet.is-roll .label-tag { break-after: page; break-inside: avoid; }
+  .label-sheet.is-roll .label-tag:last-child { break-after: auto; }
 }
 #print-root { display: none; }
 
@@ -334,7 +348,6 @@ table.data tbody tr[data-open] { cursor: pointer; }
   body.printing-receipt > *:not(#print-root) { display: none !important; }
   #print-root { display: block !important; }
   #print-root .receipt { border: 0; max-width: 72mm; }
-  @page { margin: 2mm; }
 }
 
 /* ------------------------------------------------------------ miudezas --- */
@@ -365,6 +378,8 @@ table.data tbody tr[data-open] { cursor: pointer; }
 .kv dd { margin: 0; font-size: var(--fs-md); overflow-wrap: anywhere; }
 .scan-box { position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border-radius: var(--r-lg); overflow: hidden; }
 .scan-box video { width: 100%; height: 100%; object-fit: cover; }
+.scan-box.hit { box-shadow: 0 0 0 3px var(--success); }
+.scan-last { min-height: 22px; margin-top: 10px; text-align: center; font-weight: 600; }
 .scan-box::after { content: ''; position: absolute; left: 10%; right: 10%; top: 50%; height: 2px; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
 .status-steps { display: flex; flex-wrap: wrap; gap: 4px; }
 .status-steps .step { border: 0; border-radius: var(--r-full); cursor: pointer; font-weight: 600; font-size: var(--fs-sm); padding: 6px 13px; background: var(--surface-2); color: var(--text-2); }

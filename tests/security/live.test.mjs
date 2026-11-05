@@ -70,7 +70,7 @@ if (SITE) {
     ok(r.status === 404, `arquivo interno não publicado: ${p} (${r.status})`);
   }
   const js = await (await fetch(`${SITE}/assets/js/config.js`)).text();
-  ok(!/service_role|sb_secret/i.test(js), 'nenhuma chave secreta no site');
+  ok(!/sb_secret_[A-Za-z0-9]{8,}|eyJ[A-Za-z0-9_-]{20,}.[A-Za-z0-9_-]{20,}/.test(js), 'nenhuma chave secreta no site');
 }
 
 console.log(`\n${fails ? `${fails} FALHA(S)` : 'Tudo certo.'}`);

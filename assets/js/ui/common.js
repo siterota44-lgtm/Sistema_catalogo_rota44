@@ -275,14 +275,22 @@ export function catalogUrl(hash = '') {
 
 /* ------------------------------------------------ imprimir sem sair -- */
 
-export function printHTML(html, bodyClass) {
+/**
+ * @param {string} pageCSS  regras do @page deste papel. Não pode ficar no arquivo de
+ * estilo: @page vale para toda impressão, e a margem do comprovante cortava a etiqueta.
+ */
+export function printHTML(html, bodyClass, pageCSS = '') {
   let root = document.getElementById('print-root');
   if (!root) { root = document.createElement('div'); root.id = 'print-root'; document.body.appendChild(root); }
   root.innerHTML = html;
   document.body.classList.add(bodyClass);
+  const page = document.createElement('style');
+  page.textContent = pageCSS ? `@page { ${pageCSS} }` : '';
+  document.head.appendChild(page);
   const done = () => {
     document.body.classList.remove(bodyClass);
     root.innerHTML = '';
+    page.remove();
     window.removeEventListener('afterprint', done);
   };
   window.addEventListener('afterprint', done);

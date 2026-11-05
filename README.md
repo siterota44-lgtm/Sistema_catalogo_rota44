@@ -96,7 +96,9 @@ Editor rode `schema.sql` → `2_login.sql` → `1_dados.sql`. **Cuidado:** o `1_
 | **Promoções e cupons** | % por loja, categoria, drop ou produto; cupons com validade e limite |
 | **Estoque** | "Chegou peça" em uma tela, físico × reservado × disponível, curva de grade, kardex, repor, parados, contagem física |
 | **Compras** | Lançamento em grade, recebimento parcial, frete rateado, custo médio, conta a pagar |
-| **Etiquetas** | 50×30 mm com código de barras e preço (de/por em promoção) |
+| **Etiquetas** | Rolo térmico 50×30, 40×25 ou 60×40 mm (uma etiqueta por página, do tamanho do papel) ou folha A4, com código de barras e preço (de/por em promoção) |
+| **PDF do pedido** | Na ficha da venda, no comprovante e nos pedidos do catálogo: com foto da peça, parcelas e Pix, sem número interno nem SKU. No celular, envia direto pelo WhatsApp |
+| **Leitor de código** | Leitor USB (mesmo com o foco fora do campo) e câmera do celular, que fica aberta para bipar várias peças |
 | **Financeiro** | DRE simples, fluxo de caixa com previsto (cartão cai depois), contas a pagar e receber |
 | **Relatórios** | Vendas, produtos (giro, margem, sell-through por drop), estoque (curva ABC, ruptura), trocas, clientes, comissões. Tudo em CSV |
 | **Catálogo online** | Abrir/fechar, link, QR code, textos e regras da vitrine |
@@ -142,6 +144,8 @@ npm run test:db                         # schema.sql num Postgres de verdade: pe
 npm run test:unit                       # fórmulas e código de barras
 npm run test:e2e                        # roteiro completo no Chrome, com o banco imitado (nada vai para o Supabase real)
 npm run test:iphone                     # motor do Safari com tela de iPhone: fotos grandes, 4 fotos por peça, pedido no WhatsApp
+npm run test:balcao                     # etiqueta em cada papel a 203 dpi, leitor USB, câmera simulada, PDF do pedido e mensagens
+npm run test:vendedor                   # um dia inteiro do vendedor, da inclusão na equipe ao fechamento do caixa
                                         # (uma vez antes: npx playwright-core install webkit; E2E_ENGINE=webkit roda o test:e2e nele)
 npm run test:security                   # ataque sem login contra o banco real
 ```

@@ -6,6 +6,8 @@
 
 import * as Data from '../core/data.js';
 import { esc, money, formatDateTime, whatsappLink, maskPhone } from '../core/utils.js';
+import { requestDoc } from '../docs/order-doc.js';
+import { openOrderPdf } from './doc-preview.js';
 import { icon } from './icons.js';
 import { toast, toastError, confirmDialog } from './kit.js';
 import { $, $$, moneyHTML, badge, emptyBox, head, onError, code } from './common.js';
@@ -37,7 +39,7 @@ export function mount(host, ctx) {
     if (!reqs.length) return `<div class="card">${emptyBox('Nenhum pedido ainda', 'Divulgue o link do catálogo em Catálogo online.')}</div>`;
     return `<div class="col gap-3">${reqs.slice(0, 100).map((r) => {
       const [label, tone] = STATUS[r.status] || [r.status, 'gray'];
-      const wa = whatsappLink(r.customer_phone, `Fala, ${r.customer_name.split(' ')[0]}! Aqui é da Rota 44, sobre o seu pedido C${r.number}.`);
+      const wa = whatsappLink(r.customer_phone, `Fala, ${r.customer_name.split(' ')[0]}! Aqui é da Rota 44, sobre o seu pedido.`);
       return `
         <article class="card card-pad" data-id="${esc(r.id)}">
           <div class="row-between" style="flex-wrap:wrap">
@@ -54,6 +56,7 @@ export function mount(host, ctx) {
           <div class="row gap-2" style="flex-wrap:wrap;margin-top:8px">
             ${r.status === 'novo' ? `<button class="btn btn-primary btn-sm" data-convert>${icon('orders')} Criar venda</button>` : ''}
             ${wa ? `<a class="btn btn-sm" href="${esc(wa)}" target="_blank" rel="noopener">${icon('whatsapp')} WhatsApp</a>` : ''}
+            <button class="btn btn-sm" data-pdf>${icon('download')} PDF</button>
             ${r.sale_id ? `<button class="btn btn-sm" data-sale="${esc(r.sale_id)}">Ver venda</button>` : ''}
             ${r.status === 'novo' ? '<button class="btn btn-ghost btn-sm" data-discard>Descartar</button>' : ''}
           </div>
@@ -102,6 +105,7 @@ export function mount(host, ctx) {
       }
       return;
     }
+    if (e.target.closest('[data-pdf]')) { openOrderPdf(requestDoc(r)); return; }
     if (e.target.closest('[data-convert]')) {
       const items = (r.items || []).filter((i) => Data.variant(i.variant_id)).map((i) => ({ variant_id: i.variant_id, qty: i.qty, discount_value: 0 }));
       if (!items.length) { toast('As peças deste pedido não existem mais', { kind: 'warn' }); return; }

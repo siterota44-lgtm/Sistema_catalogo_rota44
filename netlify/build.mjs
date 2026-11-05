@@ -25,7 +25,8 @@ const CSP = [
   "object-src 'none'",
   "frame-ancestors 'none'",
   "form-action 'self'",
-  "script-src 'self' https://cdn.jsdelivr.net",
+  // wasm-unsafe-eval: o leitor de código de barras do iPhone roda em WebAssembly
+  "script-src 'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self'",
   "img-src 'self' data: blob: https://*.supabase.co",
